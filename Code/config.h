@@ -549,7 +549,7 @@
        PITCH, ROLL and YAW is centered and THROTTLE is set to FAILSAFE_THR0TTLE value. You must set this value to descending about 1m/s or so 
        for best results. This value is depended from your configuration, AUW and some other params.  Next, afrer FAILSAFE_OFF_DELAY the copter is disarmed, 
        and motors is stopped. If RC pulse coming back before reached FAILSAFE_OFF_DELAY time, after the small quard time the RC control is returned to normal. */
-    //#define FAILSAFE                                // uncomment  to activate the failsafe function
+    #define FAILSAFE                                // uncomment  to activate the failsafe function
     #define FAILSAFE_DELAY     10                     // Guard time for failsafe activation after signal lost. 1 step = 0.1sec - 1sec in example
     #define FAILSAFE_OFF_DELAY 200                    // Time for Landing before motors stop in 0.1sec. 1 step = 0.1sec - 20sec in example
     #define FAILSAFE_THROTTLE  (MINTHROTTLE + 200)    // (*) Throttle level used for landing - may be relative to MINTHROTTLE - as in this case
@@ -674,7 +674,9 @@
        Convert the degree+minutes into decimal degree by ==> degree+minutes*(1/60)
        Note the sign on declination it could be negative or positive (WEST or EAST) */
     //#define MAG_DECLINIATION  3.96f              //For Budapest Hungary.
-    #define MAG_DECLINIATION  -12.24130f
+    //#define MAG_DECLINIATION  -12.24130f
+	//#define MAG_DECLINIATION	-3.267f				// For Taiwan South
+	#define MAG_DECLINIATION	-4.05f				//For Taiwan Taipei
     
     #define GPS_FILTERING                        // add a 5 element moving average filter to GPS coordinates, helps eliminate gps noise but adds latency comment out to disable
     #define GPS_LOW_SPEED_D_FILTER               // below .5m/s speed ignore D term for POSHOLD_RATE, theoretically this also removed D term induced noise commnent out to disable
