@@ -25,7 +25,7 @@ static uint8_t inBuf[INBUF_SIZE][UART_NUMBER];
 #endif
 // Capability is bit flags; next defines should be 2, 4, 8...
 
-const uint32_t PROGMEM capability = 0+BIND_CAPABLE;
+const uint32_t capability = 0+BIND_CAPABLE;
 
 #ifdef DEBUGMSG
   #define DEBUG_MSG_BUFFER_SIZE 128
@@ -37,30 +37,34 @@ const uint32_t PROGMEM capability = 0+BIND_CAPABLE;
 // Multiwii Serial Protocol 0 
 #define MSP_VERSION              0
 
+//to multiwii developpers/committers : do not add new MSP messages without a proper argumentation/agreement on the forum
 #define MSP_IDENT                100   //out message         multitype + multiwii version + protocol version + capability variable
 #define MSP_STATUS               101   //out message         cycletime & errors_count & sensor present & box activation & current setting number
 #define MSP_RAW_IMU              102   //out message         9 DOF
 #define MSP_SERVO                103   //out message         8 servos
 #define MSP_MOTOR                104   //out message         8 motors
-#define MSP_RC                   105   //out message         8 rc chan
+#define MSP_RC                   105   //out message         8 rc chan and more
 #define MSP_RAW_GPS              106   //out message         fix, numsat, lat, lon, alt, speed, ground course
 #define MSP_COMP_GPS             107   //out message         distance home, direction home
 #define MSP_ATTITUDE             108   //out message         2 angles 1 heading
 #define MSP_ALTITUDE             109   //out message         altitude, variometer
-#define MSP_BAT                  110   //out message         vbat, powermetersum
+#define MSP_ANALOG               110   //out message         vbat, powermetersum, rssi if available on RX
 #define MSP_RC_TUNING            111   //out message         rc rate, rc expo, rollpitch rate, yaw rate, dyn throttle PID
-#define MSP_PID                  112   //out message         up to 16 P I D (8 are used)
-#define MSP_BOX                  113   //out message         up to 16 checkbox (11 are used)
-#define MSP_MISC                 114   //out message         powermeter trig + 8 free for future use
+#define MSP_PID                  112   //out message         P I D coeff (9 are used currently)
+#define MSP_BOX                  113   //out message         BOX setup (number is dependant of your setup)
+#define MSP_MISC                 114   //out message         powermeter trig
 #define MSP_MOTOR_PINS           115   //out message         which pins are in use for motors & servos, for GUI 
 #define MSP_BOXNAMES             116   //out message         the aux switch names
 #define MSP_PIDNAMES             117   //out message         the PID names
 #define MSP_WP                   118   //out message         get a WP, WP# is in the payload, returns (WP#, lat, lon, alt, flags) WP#0-home, WP#16-poshold
+#define MSP_BOXIDS               119   //out message         get the permanent IDs associated to BOXes
+#define MSP_SERVO_CONF           120   //out message         Servo settings
+#define MSP_MISC_CONF            121   //out message         minthrottle,maxthrottle,mincommand,midrc,Vbat  Only prepared
 
 #define MSP_SET_RAW_RC           200   //in message          8 rc chan
 #define MSP_SET_RAW_GPS          201   //in message          fix, numsat, lat, lon, alt, speed
-#define MSP_SET_PID              202   //in message          up to 16 P I D (8 are used)
-#define MSP_SET_BOX              203   //in message          up to 16 checkbox (11 are used)
+#define MSP_SET_PID              202   //in message          P I D coeff (9 are used currently)
+#define MSP_SET_BOX              203   //in message          BOX setup (number is dependant of your setup)
 #define MSP_SET_RC_TUNING        204   //in message          rc rate, rc expo, rollpitch rate, yaw rate, dyn throttle PID
 #define MSP_ACC_CALIBRATION      205   //in message          no param
 #define MSP_MAG_CALIBRATION      206   //in message          no param
@@ -68,8 +72,12 @@ const uint32_t PROGMEM capability = 0+BIND_CAPABLE;
 #define MSP_RESET_CONF           208   //in message          no param
 #define MSP_SET_WP               209   //in message          sets a given WP (WP#,lat, lon, alt, flags)
 #define MSP_SELECT_SETTING       210   //in message          Select Setting Number (0-2)
+#define MSP_SET_HEAD             211   //in message          define a new heading hold direction
+#define MSP_SET_SERVO_CONF       212   //in message          Servo settings
+#define MSP_SET_MISC_CONF        213   //in message          minthrottle,maxthrottle,mincommand,midrc Only prepared
+#define MSP_SET_MOTOR            214   //in message          PropBalance function
 
-#define MSP_SPEK_BIND            240   //in message          no param
+#define MSP_BIND                 240   //in message          no param
 
 #define MSP_EEPROM_WRITE         250   //in message          no param
 
@@ -122,6 +130,7 @@ void tailSerialReply() {
 }
 
 void serializeNames(PGM_P s) {
+  headSerialReply(strlen_P(s));
   for (PGM_P c = s; pgm_read_byte(c); c++) {
     serialize8(pgm_read_byte(c));
   }
@@ -156,53 +165,69 @@ void serialCom() {
     #if defined(SPEKTRUM) && (UART_NUMBER > 1)
       #define SPEK_COND  && (SPEK_SERIAL_PORT != CURRENTPORT)
     #endif
-    while (SerialAvailable(CURRENTPORT) GPS_COND SPEK_COND) {
+    uint8_t cc = SerialAvailable(CURRENTPORT);
+    while (cc-- GPS_COND SPEK_COND) {
       uint8_t bytesTXBuff = ((uint8_t)(serialHeadTX[CURRENTPORT]-serialTailTX[CURRENTPORT]))%TX_BUFFER_SIZE; // indicates the number of occupied bytes in TX buffer
       if (bytesTXBuff > TX_BUFFER_SIZE - 50 ) return; // ensure there is enough free TX buffer to go further (50 bytes margin)
       c = SerialRead(CURRENTPORT);
-  
-      if (c_state[CURRENTPORT] == IDLE) {
-        c_state[CURRENTPORT] = (c=='$') ? HEADER_START : IDLE;
-        if (c_state[CURRENTPORT] == IDLE) evaluateOtherData(c); // evaluate all other incoming serial data
-      } else if (c_state[CURRENTPORT] == HEADER_START) {
-        c_state[CURRENTPORT] = (c=='M') ? HEADER_M : IDLE;
-      } else if (c_state[CURRENTPORT] == HEADER_M) {
-        c_state[CURRENTPORT] = (c=='<') ? HEADER_ARROW : IDLE;
-      } else if (c_state[CURRENTPORT] == HEADER_ARROW) {
-        if (c > INBUF_SIZE) {  // now we are expecting the payload size
+      #ifdef SUPPRESS_ALL_SERIAL_MSP
+        // no MSP handling, so go directly
+        evaluateOtherData(c);
+      #else
+        // regular data handling to detect and handle MSP and other data
+        if (c_state[CURRENTPORT] == IDLE) {
+          c_state[CURRENTPORT] = (c=='$') ? HEADER_START : IDLE;
+          if (c_state[CURRENTPORT] == IDLE) evaluateOtherData(c); // evaluate all other incoming serial data
+        } else if (c_state[CURRENTPORT] == HEADER_START) {
+          c_state[CURRENTPORT] = (c=='M') ? HEADER_M : IDLE;
+        } else if (c_state[CURRENTPORT] == HEADER_M) {
+          c_state[CURRENTPORT] = (c=='<') ? HEADER_ARROW : IDLE;
+        } else if (c_state[CURRENTPORT] == HEADER_ARROW) {
+          if (c > INBUF_SIZE) {  // now we are expecting the payload size
+            c_state[CURRENTPORT] = IDLE;
+            continue;
+          }
+          dataSize[CURRENTPORT] = c;
+          offset[CURRENTPORT] = 0;
+          checksum[CURRENTPORT] = 0;
+          indRX[CURRENTPORT] = 0;
+          checksum[CURRENTPORT] ^= c;
+          c_state[CURRENTPORT] = HEADER_SIZE;  // the command is to follow
+        } else if (c_state[CURRENTPORT] == HEADER_SIZE) {
+          cmdMSP[CURRENTPORT] = c;
+          checksum[CURRENTPORT] ^= c;
+          c_state[CURRENTPORT] = HEADER_CMD;
+        } else if (c_state[CURRENTPORT] == HEADER_CMD && offset[CURRENTPORT] < dataSize[CURRENTPORT]) {
+          checksum[CURRENTPORT] ^= c;
+          inBuf[offset[CURRENTPORT]++][CURRENTPORT] = c;
+        } else if (c_state[CURRENTPORT] == HEADER_CMD && offset[CURRENTPORT] >= dataSize[CURRENTPORT]) {
+          if (checksum[CURRENTPORT] == c) {  // compare calculated and transferred checksum
+            evaluateCommand();  // we got a valid packet, evaluate it
+          }
           c_state[CURRENTPORT] = IDLE;
-          continue;
         }
-        dataSize[CURRENTPORT] = c;
-        offset[CURRENTPORT] = 0;
-        checksum[CURRENTPORT] = 0;
-        indRX[CURRENTPORT] = 0;
-        checksum[CURRENTPORT] ^= c;
-        c_state[CURRENTPORT] = HEADER_SIZE;  // the command is to follow
-      } else if (c_state[CURRENTPORT] == HEADER_SIZE) {
-        cmdMSP[CURRENTPORT] = c;
-        checksum[CURRENTPORT] ^= c;
-        c_state[CURRENTPORT] = HEADER_CMD;
-      } else if (c_state[CURRENTPORT] == HEADER_CMD && offset[CURRENTPORT] < dataSize[CURRENTPORT]) {
-        checksum[CURRENTPORT] ^= c;
-        inBuf[offset[CURRENTPORT]++][CURRENTPORT] = c;
-      } else if (c_state[CURRENTPORT] == HEADER_CMD && offset[CURRENTPORT] >= dataSize[CURRENTPORT]) {
-        if (checksum[CURRENTPORT] == c) {  // compare calculated and transferred checksum
-          evaluateCommand();  // we got a valid packet, evaluate it
-        }
-        c_state[CURRENTPORT] = IDLE;
-      }
+      #endif // SUPPRESS_ALL_SERIAL_MSP
     }
   }
 }
 
+void  s_struct(uint8_t *cb,uint8_t siz) {
+  headSerialReply(siz);
+  while(siz--) serialize8(*cb++);
+}
+
+void s_struct_w(uint8_t *cb,uint8_t siz) {
+ headSerialReply(0);
+  while(siz--) *cb++ = read8();
+}
+
+#ifndef SUPPRESS_ALL_SERIAL_MSP
 void evaluateCommand() {
+  uint32_t tmp=0; 
+
   switch(cmdMSP[CURRENTPORT]) {
    case MSP_SET_RAW_RC:
-     for(uint8_t i=0;i<8;i++) {
-       rcData[i] = read16();
-     }
-     headSerialReply(0);
+     s_struct_w((uint8_t*)&rcData,16);
      break;
    #if GPS
    case MSP_SET_RAW_GPS:
@@ -217,28 +242,13 @@ void evaluateCommand() {
      break;
    #endif
    case MSP_SET_PID:
-     for(uint8_t i=0;i<PIDITEMS;i++) {
-       conf.P8[i]=read8();
-       conf.I8[i]=read8();
-       conf.D8[i]=read8();
-     }
-     headSerialReply(0);
+     s_struct_w((uint8_t*)&conf.pid[0].P8,3*PIDITEMS);
      break;
    case MSP_SET_BOX:
-     for(uint8_t i=0;i<CHECKBOXITEMS;i++) {
-       conf.activate[i]=read16();
-     }
-     headSerialReply(0);
+     s_struct_w((uint8_t*)&conf.activate[0],CHECKBOXITEMS*2);
      break;
    case MSP_SET_RC_TUNING:
-     conf.rcRate8 = read8();
-     conf.rcExpo8 = read8();
-     conf.rollPitchRate = read8();
-     conf.yawRate = read8();
-     conf.dynThrPID = read8();
-     conf.thrMid8 = read8();
-     conf.thrExpo8 = read8();
-     headSerialReply(0);
+     s_struct_w((uint8_t*)&conf.rcRate8,7);
      break;
    case MSP_SET_MISC:
      #if defined(POWERMETER)
@@ -246,6 +256,13 @@ void evaluateCommand() {
      #endif
      headSerialReply(0);
      break;
+   #if defined (DYNBALANCE)
+     case MSP_SET_MOTOR:
+       motorTogglesByte = read8();
+       f.ARMED = 0;
+       break;
+   #endif
+   #ifdef MULTIPLE_CONFIGURATION_PROFILES
    case MSP_SELECT_SETTING:
      if(!f.ARMED) {
        global_conf.currentSet = read8();
@@ -255,77 +272,163 @@ void evaluateCommand() {
      }
      headSerialReply(0);
      break;
-   case MSP_IDENT:
-     headSerialReply(7);
-     serialize8(VERSION);   // multiwii version
-     serialize8(MULTITYPE); // type of multicopter
-     serialize8(MSP_VERSION);         // MultiWii Serial Protocol Version
-     serialize32(pgm_read_dword(&(capability)));        // "capability"
+   #endif
+   case MSP_SET_HEAD:
+     s_struct_w((uint8_t*)&magHold,2);
      break;
+   case MSP_IDENT:
+     struct {
+       uint8_t v,t,msp_v;
+       uint32_t cap;
+     } id;
+     id.v     = VERSION;
+     id.t     = MULTITYPE;
+     id.msp_v = MSP_VERSION;
+     id.cap   = capability;
+     s_struct((uint8_t*)&id,7);
+     break;
+     
+   #if !defined(DISABLE_SETTINGS_TAB)  
+   case MSP_SET_MISC_CONF:
+     conf.minthrottle = read16();
+     // Prepared for future use
+     /*conf.maxthrottle = */read16();
+     /*conf.mincommand  = */read16();
+     /*conf.midrc       = */read16();
+     #if MAG
+       conf.mag_decliniation = read16()-1000;
+     #else
+       read16();
+     #endif
+     #if defined(VBAT)
+       conf.vbatscale        = read8();
+       conf.vbatlevel_warn1  = read8();
+       conf.vbatlevel_warn2  = read8();
+       conf.vbatlevel_crit   = read8();
+     #else
+       for(uint8_t i=0;i<4;i++) read8();
+     #endif
+     headSerialReply(0);
+     break;
+   case MSP_MISC_CONF:
+     headSerialReply(20);
+     serialize16(conf.minthrottle);
+     serialize16(MAXTHROTTLE);
+     serialize16(MINCOMMAND );
+     serialize16(MIDRC);
+     #ifdef LOG_PERMANENT
+       serialize16(plog.arm);
+       serialize32(plog.lifetime + (plog.armed_time / 1000000));//lifetime
+     #else
+       serialize16(0);
+       serialize32(0);
+     #endif
+     #if MAG
+       serialize16(conf.mag_decliniation+1000);
+     #else
+       serialize16(0);
+     #endif
+     #ifdef VBAT
+       serialize8(conf.vbatscale      );
+       serialize8(conf.vbatlevel_warn1);
+       serialize8(conf.vbatlevel_warn2);
+       serialize8(conf.vbatlevel_crit );
+     #else
+       for(uint8_t i=0;i<4;i++) serialize8(0);
+     #endif
+     break;
+   #endif
+     
    case MSP_STATUS:
-     headSerialReply(11);
-     serialize16(cycleTime);
-     serialize16(i2c_errors_count);
-     serialize16(ACC|BARO<<1|MAG<<2|GPS<<3|SONAR<<4);
-     serialize32(
-                 #if ACC
-                   f.ANGLE_MODE<<BOXANGLE|
-                   f.HORIZON_MODE<<BOXHORIZON|
-                 #endif
-                 #if BARO && (!defined(SUPPRESS_BARO_ALTHOLD))
-                   f.BARO_MODE<<BOXBARO|
-                 #endif
-                 #if MAG
-                   f.MAG_MODE<<BOXMAG|f.HEADFREE_MODE<<BOXHEADFREE|rcOptions[BOXHEADADJ]<<BOXHEADADJ|
-                 #endif
-                 #if defined(SERVO_TILT) || defined(GIMBAL)|| defined(SERVO_MIX_TILT)
-                   rcOptions[BOXCAMSTAB]<<BOXCAMSTAB|
-                 #endif
-                 #if defined(CAMTRIG)
-                   rcOptions[BOXCAMTRIG]<<BOXCAMTRIG|
-                 #endif
-                 #if GPS
-                   f.GPS_HOME_MODE<<BOXGPSHOME|f.GPS_HOLD_MODE<<BOXGPSHOLD|
-                 #endif
-                 #if defined(FIXEDWING) || defined(HELICOPTER) || defined(INFLIGHT_ACC_CALIBRATION) 
-                   f.PASSTHRU_MODE<<BOXPASSTHRU|
-                 #endif
-                 #if defined(BUZZER)
-                   rcOptions[BOXBEEPERON]<<BOXBEEPERON|
-                 #endif
-                 #if defined(LED_FLASHER)
-                   rcOptions[BOXLEDMAX]<<BOXLEDMAX|
-                 #endif
-                 #if defined(LANDING_LIGHTS_DDR)
-                   rcOptions[BOXLLIGHTS]<<BOXLLIGHTS |
-                 #endif
-                 f.ARMED<<BOXARM);
-       serialize8(global_conf.currentSet);   // current setting
+     struct {
+       uint16_t cycleTime,i2c_errors_count,sensor;
+       uint32_t flag;
+       uint8_t set;
+     } st;
+     st.cycleTime        = cycleTime;
+     st.i2c_errors_count = i2c_errors_count;
+     st.sensor           = ACC|BARO<<1|MAG<<2|GPS<<3|SONAR<<4;
+     #if ACC
+       if(f.ANGLE_MODE)   tmp |= 1<<BOXANGLE;
+       if(f.HORIZON_MODE) tmp |= 1<<BOXHORIZON;
+     #endif
+     #if BARO && (!defined(SUPPRESS_BARO_ALTHOLD))
+       if(f.BARO_MODE) tmp |= 1<<BOXBARO;
+     #endif
+     #if MAG
+       if(f.MAG_MODE) tmp |= 1<<BOXMAG;
+       #if !defined(FIXEDWING)
+         if(f.HEADFREE_MODE)       tmp |= 1<<BOXHEADFREE;
+         if(rcOptions[BOXHEADADJ]) tmp |= 1<<BOXHEADADJ;
+       #endif
+     #endif
+     #if defined(SERVO_TILT) || defined(GIMBAL)|| defined(SERVO_MIX_TILT) || defined(SERVO_TILT_NHADRIAN)
+       if(rcOptions[BOXCAMSTAB]) tmp |= 1<<BOXCAMSTAB;
+     #endif
+     #if defined(CAMTRIG)
+       if(rcOptions[BOXCAMTRIG]) tmp |= 1<<BOXCAMTRIG;
+     #endif
+     #if GPS
+       if(f.GPS_HOME_MODE) tmp |= 1<<BOXGPSHOME; 
+       if(f.GPS_HOLD_MODE) tmp |= 1<<BOXGPSHOLD;
+     #endif
+     #if defined(FIXEDWING) || defined(HELICOPTER)
+       if(f.PASSTHRU_MODE) tmp |= 1<<BOXPASSTHRU;
+     #endif
+     #if defined(BUZZER)
+       if(rcOptions[BOXBEEPERON]) tmp |= 1<<BOXBEEPERON;
+     #endif
+     #if defined(LED_FLASHER)
+       if(rcOptions[BOXLEDMAX]) tmp |= 1<<BOXLEDMAX;
+       if(rcOptions[BOXLEDLOW]) tmp |= 1<<BOXLEDLOW;
+     #endif
+     #if defined(LANDING_LIGHTS_DDR)
+       if(rcOptions[BOXLLIGHTS]) tmp |= 1<<BOXLLIGHTS;
+     #endif
+     #if defined(VARIOMETER)
+       if(rcOptions[BOXVARIO]) tmp |= 1<<BOXVARIO;
+     #endif
+     #if defined(INFLIGHT_ACC_CALIBRATION)
+       if(rcOptions[BOXCALIB]) tmp |= 1<<BOXCALIB;
+     #endif
+     #if defined(GOVERNOR_P)
+       if(rcOptions[BOXGOV]) tmp |= 1<<BOXGOV;
+     #endif
+     #if defined(OSD_SWITCH)
+       if(rcOptions[BOXOSD]) tmp |= 1<<BOXOSD;
+     #endif
+     #if defined(AUTOLAND) && BARO && GPS
+       if(rcOptions[BOXAUTOLAND]) tmp |= 1<<BOXAUTOLAND;
+     #endif
+     #if defined(OPTFLOW)
+       if(rcOptions[BOXOPTFLOW]) tmp |= 1<< BOXOPTFLOW;
+     #endif
+     if(f.ARMED) tmp |= 1<<BOXARM;
+     st.flag=tmp;
+     st.set              = global_conf.currentSet;
+     s_struct((uint8_t*)&st,11);
      break;
    case MSP_RAW_IMU:
-     headSerialReply(18);
-     for(uint8_t i=0;i<3;i++) serialize16(accSmooth[i]);
-     for(uint8_t i=0;i<3;i++) serialize16(gyroData[i]);
-     for(uint8_t i=0;i<3;i++) serialize16(magADC[i]);
+     #if defined(DYNBALANCE)
+       // Send the unfiltered Gyro & Acc values to gui.
+       for(uint8_t axis=0;axis<3;axis++) {imu.gyroData[axis]=imu.gyroADC[axis];imu.accSmooth[axis]= imu.accADC[axis];}
+     #endif 
+     s_struct((uint8_t*)&imu,18);
      break;
    case MSP_SERVO:
-     headSerialReply(16);
-     for(uint8_t i=0;i<8;i++)
-       #if defined(SERVO)
-       serialize16(servo[i]);
-       #else
-       serialize16(0);
-       #endif
+     s_struct((uint8_t*)&servo,16);
+     break;
+   case MSP_SERVO_CONF:
+     s_struct((uint8_t*)&conf.servoConf[0].min,56); // struct servo_conf_ is 7 bytes length: min:2 / max:2 / middle:2 / rate:1    ----     8 servo =>  8x7 = 56
+     break;
+   case MSP_SET_SERVO_CONF:
+     s_struct_w((uint8_t*)&conf.servoConf[0].min,56);
      break;
    case MSP_MOTOR:
-     headSerialReply(16);
-     for(uint8_t i=0;i<8;i++) {
-       serialize16( (i < NUMBER_MOTOR) ? motor[i] : 0 );
-     }
+     s_struct((uint8_t*)&motor,16);
      break;
    case MSP_RC:
-     headSerialReply(RC_CHANS * 2);
-     for(uint8_t i=0;i<RC_CHANS;i++) serialize16(rcData[i]);
+     s_struct((uint8_t*)&rcData,RC_CHANS*2);
      break;
    #if GPS
    case MSP_RAW_GPS:
@@ -346,93 +449,128 @@ void evaluateCommand() {
      break;
    #endif
    case MSP_ATTITUDE:
-     headSerialReply(8);
-     for(uint8_t i=0;i<2;i++) serialize16(angle[i]);
-     serialize16(heading);
-     serialize16(headFreeModeHold);
+     s_struct((uint8_t*)&att,6);
      break;
    case MSP_ALTITUDE:
-     headSerialReply(6);
-     serialize32(EstAlt);
-     serialize16(vario);                  // added since r1172
+     s_struct((uint8_t*)&alt,6);
      break;
-   case MSP_BAT:
-     headSerialReply(3);
-     serialize8(vbat);
-     serialize16(intPowerMeterSum);
+   case MSP_ANALOG:
+     s_struct((uint8_t*)&analog,5);
      break;
    case MSP_RC_TUNING:
-     headSerialReply(7);
-     serialize8(conf.rcRate8);
-     serialize8(conf.rcExpo8);
-     serialize8(conf.rollPitchRate);
-     serialize8(conf.yawRate);
-     serialize8(conf.dynThrPID);
-     serialize8(conf.thrMid8);
-     serialize8(conf.thrExpo8);
+     s_struct((uint8_t*)&conf.rcRate8,7);
      break;
    case MSP_PID:
-     headSerialReply(3*PIDITEMS);
-     for(uint8_t i=0;i<PIDITEMS;i++) {
-       serialize8(conf.P8[i]);
-       serialize8(conf.I8[i]);
-       serialize8(conf.D8[i]);
-     }
-     break;
-   case MSP_BOX:
-     headSerialReply(2*CHECKBOXITEMS);
-     for(uint8_t i=0;i<CHECKBOXITEMS;i++) {
-       serialize16(conf.activate[i]);
-     }
-     break;
-   case MSP_BOXNAMES:
-     headSerialReply(strlen_P(boxnames));
-     serializeNames(boxnames);
+     s_struct((uint8_t*)&conf.pid[0].P8,3*PIDITEMS);
      break;
    case MSP_PIDNAMES:
-     headSerialReply(strlen_P(pidnames));
      serializeNames(pidnames);
      break;
+   case MSP_BOX:
+     s_struct((uint8_t*)&conf.activate[0],2*CHECKBOXITEMS);
+     break;
+   case MSP_BOXNAMES:
+     serializeNames(boxnames);
+     break;
+   case MSP_BOXIDS:
+     headSerialReply(CHECKBOXITEMS);
+     for(uint8_t i=0;i<CHECKBOXITEMS;i++) {
+       serialize8(pgm_read_byte(&(boxids[i])));
+     }
+     break;
    case MSP_MISC:
-     headSerialReply(2);
-     serialize16(intPowerTrigger1);
+     s_struct((uint8_t*)&intPowerTrigger1,2);
      break;
    case MSP_MOTOR_PINS:
-     headSerialReply(8);
-     for(uint8_t i=0;i<8;i++) {
-       serialize8(PWM_PIN[i]);
-     }
+     s_struct((uint8_t*)&PWM_PIN,8);
      break;
    #if defined(USE_MSP_WP)    
    case MSP_WP:
      {
-      uint8_t wp_no = read8();           //get the wp number  
-      headSerialReply(12);
-      if (wp_no == 0) {
-        serialize8(0);                   //wp0
-        serialize32(GPS_home[LAT]);
-        serialize32(GPS_home[LON]);
-        serialize16(0);                  //altitude will come here 
-        serialize8(0);                   //nav flag will come here
-      } else if (wp_no == 16)
-      {
-        serialize8(16);                  //wp16
-        serialize32(GPS_hold[LAT]);
-        serialize32(GPS_hold[LON]);
-        serialize16(0);                  //altitude will come here 
-        serialize8(0);                   //nav flag will come here
-      } 
+       int32_t lat = 0,lon = 0;
+       uint8_t wp_no = read8();        //get the wp number  
+       headSerialReply(18);
+       if (wp_no == 0) {
+         lat = WP[HOME].Lat;
+         lon = WP[HOME].Lon;
+       } else if (wp_no == 16) {
+         lat = WP[HOLD].Lat;
+         lon = WP[HOLD].Lon;
+       }
+       serialize8(wp_no);
+       serialize32(lat);
+       serialize32(lon);
+       serialize32(AltHold/10);        //altitude (cm) will come here -- temporary implementation to test feature with apps
+       serialize16(0);                 //heading  will come here (deg)
+       serialize16(0);                 //time to stay (ms) will come here 
+       serialize8(0);                  //nav flag will come here
      }
      break;
    case MSP_SET_WP:
      {
-      uint8_t wp_no = read8();          //get the wp number  
-      if (wp_no == 0) {
-        GPS_home[LAT] = read32();
-        GPS_home[LON] = read32();
-        read32();                       // future: to set altitude
-        read8();                        // future: to set nav flag
-      }
+       int32_t lat = 0,lon = 0,alt = 0;
+       uint8_t wp_no = read8();        //get the wp number
+       lat = read32();
+       lon = read32();
+       alt = read32();                 // to set altitude (cm)
+       read16();                       // future: to set heading (deg)
+       read16();                       // future: to set time to stay (ms)
+       read8();                        // future: to set nav flag
+       if (wp_no == 0) {
+         WP[HOME].Lat = lat;
+         WP[HOME].Lon = lon;
+         #if defined(I2C_GPS)        // by Erik
+           i2c_rep_start(I2C_GPS_ADDRESS << 1);
+           i2c_write(I2C_GPS_WP0);
+           uint8_t* ptr = (uint8_t*)&(WP[HOME].Lat);
+           i2c_write(*ptr++);
+           i2c_write(*ptr++);
+           i2c_write(*ptr++);
+           i2c_write(*ptr);
+
+           ptr = (uint8_t*)&(WP[HOME].Lon);
+           i2c_write(*ptr++);
+           i2c_write(*ptr++);
+           i2c_write(*ptr++);
+           i2c_write(*ptr);
+         #endif
+         f.GPS_HOME_MODE = 0;          // with this flag, GPS_set_next_wp will be called in the next loop -- OK with SERIAL GPS / OK with I2C GPS
+         f.GPS_FIX_HOME  = 1;
+         if (alt != 0) {
+             WP[HOME].Alt = alt;           // temporary implementation to test feature with apps
+             WP[HOME].Vario = RTH_VARIO;   // vario can be inserted here instead of predefined
+             WP[HOME].Updated = 1;         // HOME WP is updated
+         }
+       } else if (wp_no == 16) {       // OK with SERIAL GPS  --  NOK for I2C GPS / needs more code dev in order to inject GPS coord inside I2C GPS
+         WP[HOLD].Lat = lat;
+         WP[HOLD].Lon = lon;
+         #if defined(I2C_GPS)          // by Erik
+            i2c_rep_start(I2C_GPS_ADDRESS << 1);
+            i2c_write(I2C_GPS_WP1);  // Shall I use this waypoint?
+            uint8_t* ptr = (uint8_t*)&(WP[HOLD].Lat);
+            i2c_write(*ptr++);
+            i2c_write(*ptr++);
+            i2c_write(*ptr++);
+            i2c_write(*ptr);
+
+            ptr = (uint8_t*)&(WP[HOLD].Lon);
+            i2c_write(*ptr++);
+            i2c_write(*ptr++);
+            i2c_write(*ptr++);
+            i2c_write(*ptr);
+
+            GPS_I2C_command(I2C_GPS_COMMAND_START_NAV, 1);
+            nav_mode      = NAV_MODE_WP;
+         #else
+            nav_mode      = NAV_MODE_WP;
+            GPS_set_next_wp(&WP[HOLD].Lat,&WP[HOLD].Lon);
+         #endif
+         if (alt != 0) {
+             WP[HOLD].Alt   = alt;         // temporary implementation to test feature with apps
+             WP[HOLD].Vario = WP_VARIO;    // vario can be inserted here instead of predefined
+             WP[HOLD].Updated = 1;         // HOLD WP is updated
+         }
+       }
      }
      headSerialReply(0);
      break;
@@ -442,28 +580,25 @@ void evaluateCommand() {
      headSerialReply(0);
      break;
    case MSP_ACC_CALIBRATION:
-     if(!f.ARMED) calibratingA=400;
+     if(!f.ARMED) calibratingA=512;
      headSerialReply(0);
      break;
    case MSP_MAG_CALIBRATION:
      if(!f.ARMED) f.CALIBRATE_MAG = 1;
      headSerialReply(0);
      break;
-#if defined(SPEK_BIND)
-   case MSP_SPEK_BIND:
+   #if defined(SPEK_BIND)
+   case MSP_BIND:
      spekBind();  
      headSerialReply(0);
      break;
-#endif
+   #endif
    case MSP_EEPROM_WRITE:
      writeParams(0);
      headSerialReply(0);
      break;
    case MSP_DEBUG:
-     headSerialReply(8);
-     for(uint8_t i=0;i<4;i++) {
-       serialize16(debug[i]); // 4 variables are here for general monitoring purpose
-     }
+     s_struct((uint8_t*)&debug,8);
      break;
    #ifdef DEBUGMSG
    case MSP_DEBUGMSG:
@@ -481,59 +616,67 @@ void evaluateCommand() {
   }
   tailSerialReply();
 }
+#endif // SUPPRESS_ALL_SERIAL_MSP
 
 // evaluate all other incoming serial data
 void evaluateOtherData(uint8_t sr) {
-  switch (sr) {
-  // Note: we may receive weird characters here which could trigger unwanted features during flight.
-  //       this could lead to a crash easily.
-  //       Please use if (!f.ARMED) where neccessary
-    #ifdef LCD_CONF
-    case 's':
-    case 'S':
-      if (!f.ARMED) configurationLoop();
-      break;
-    #endif
-    #if defined(LCD_TELEMETRY) && defined(LCD_TEXTSTAR)
-    case 'A': // button A press
-      toggle_telemetry(1);
-      break;
-    case 'B': // button B press
-      toggle_telemetry(2);
-      break;
-    case 'C': // button C press
-      toggle_telemetry(3);
-      break;
-    case 'D': // button D press
-      toggle_telemetry(4);
-      break;
-    case 'a': // button A release
-    case 'b': // button B release
-    case 'c': // button C release
-    case 'd': // button D release
-      break;
-    #endif
-    #ifdef LCD_TELEMETRY
-    case '0':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case '7':
-    case '8':
-    case '9':
-    #if defined(LOG_VALUES) && defined(DEBUG)
-    case 'R':
-    #endif
-    #ifdef DEBUG
-    case 'F':
-    #endif
-      toggle_telemetry(sr);
-      break;
-    #endif // LCD_TELEMETRY
-  }
+  #ifndef SUPPRESS_OTHER_SERIAL_COMMANDS
+    switch (sr) {
+    // Note: we may receive weird characters here which could trigger unwanted features during flight.
+    //       this could lead to a crash easily.
+    //       Please use if (!f.ARMED) where neccessary
+      #ifdef LCD_CONF
+        case 's':
+        case 'S':
+          if (!f.ARMED) configurationLoop();
+          break;
+      #endif
+      #ifdef LOG_PERMANENT_SHOW_AT_L
+        case 'L':
+          if (!f.ARMED) dumpPLog(1);
+          break;
+        #endif
+        #if defined(LCD_TELEMETRY) && defined(LCD_TEXTSTAR)
+        case 'A': // button A press
+          toggle_telemetry(1);
+          break;
+        case 'B': // button B press
+          toggle_telemetry(2);
+          break;
+        case 'C': // button C press
+          toggle_telemetry(3);
+          break;
+        case 'D': // button D press
+          toggle_telemetry(4);
+          break;
+        case 'a': // button A release
+        case 'b': // button B release
+        case 'c': // button C release
+        case 'd': // button D release
+          break;
+      #endif
+      #ifdef LCD_TELEMETRY
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+      #if defined(LOG_VALUES) || defined(DEBUG)
+        case 'R':
+      #endif
+      #ifdef DEBUG
+        case 'F':
+      #endif
+          toggle_telemetry(sr);
+          break;
+      #endif // LCD_TELEMETRY
+    }
+  #endif // SUPPRESS_OTHER_SERIAL_COMMANDS
 }
 
 // *******************************************************
@@ -767,7 +910,7 @@ uint8_t SerialAvailable(uint8_t port) {
       if(port == 0) return T_USB_Available();
     #endif
   #endif
-  return (serialHeadRX[port] - serialTailRX[port])%RX_BUFFER_SIZE;
+  return ((uint8_t)(serialHeadRX[port] - serialTailRX[port]))%RX_BUFFER_SIZE;
 }
 
 void SerialWrite(uint8_t port,uint8_t c){
