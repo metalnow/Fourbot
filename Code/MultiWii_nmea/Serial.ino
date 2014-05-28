@@ -37,30 +37,32 @@ const uint32_t PROGMEM capability = 0+BIND_CAPABLE;
 // Multiwii Serial Protocol 0 
 #define MSP_VERSION              0
 
+//to multiwii developpers/committers : do not add new MSP messages without a proper argumentation/agreement on the forum
 #define MSP_IDENT                100   //out message         multitype + multiwii version + protocol version + capability variable
 #define MSP_STATUS               101   //out message         cycletime & errors_count & sensor present & box activation & current setting number
 #define MSP_RAW_IMU              102   //out message         9 DOF
 #define MSP_SERVO                103   //out message         8 servos
 #define MSP_MOTOR                104   //out message         8 motors
-#define MSP_RC                   105   //out message         8 rc chan
+#define MSP_RC                   105   //out message         8 rc chan and more
 #define MSP_RAW_GPS              106   //out message         fix, numsat, lat, lon, alt, speed, ground course
 #define MSP_COMP_GPS             107   //out message         distance home, direction home
 #define MSP_ATTITUDE             108   //out message         2 angles 1 heading
 #define MSP_ALTITUDE             109   //out message         altitude, variometer
-#define MSP_BAT                  110   //out message         vbat, powermetersum
+#define MSP_ANALOG               110   //out message         vbat, powermetersum, rssi if available on RX
 #define MSP_RC_TUNING            111   //out message         rc rate, rc expo, rollpitch rate, yaw rate, dyn throttle PID
-#define MSP_PID                  112   //out message         up to 16 P I D (8 are used)
-#define MSP_BOX                  113   //out message         up to 16 checkbox (11 are used)
-#define MSP_MISC                 114   //out message         powermeter trig + 8 free for future use
+#define MSP_PID                  112   //out message         P I D coeff (9 are used currently)
+#define MSP_BOX                  113   //out message         BOX setup (number is dependant of your setup)
+#define MSP_MISC                 114   //out message         powermeter trig
 #define MSP_MOTOR_PINS           115   //out message         which pins are in use for motors & servos, for GUI 
 #define MSP_BOXNAMES             116   //out message         the aux switch names
 #define MSP_PIDNAMES             117   //out message         the PID names
 #define MSP_WP                   118   //out message         get a WP, WP# is in the payload, returns (WP#, lat, lon, alt, flags) WP#0-home, WP#16-poshold
+#define MSP_BOXIDS               119   //out message         get the permanent IDs associated to BOXes
 
 #define MSP_SET_RAW_RC           200   //in message          8 rc chan
 #define MSP_SET_RAW_GPS          201   //in message          fix, numsat, lat, lon, alt, speed
-#define MSP_SET_PID              202   //in message          up to 16 P I D (8 are used)
-#define MSP_SET_BOX              203   //in message          up to 16 checkbox (11 are used)
+#define MSP_SET_PID              202   //in message          P I D coeff (9 are used currently)
+#define MSP_SET_BOX              203   //in message          BOX setup (number is dependant of your setup)
 #define MSP_SET_RC_TUNING        204   //in message          rc rate, rc expo, rollpitch rate, yaw rate, dyn throttle PID
 #define MSP_ACC_CALIBRATION      205   //in message          no param
 #define MSP_MAG_CALIBRATION      206   //in message          no param
@@ -68,8 +70,9 @@ const uint32_t PROGMEM capability = 0+BIND_CAPABLE;
 #define MSP_RESET_CONF           208   //in message          no param
 #define MSP_SET_WP               209   //in message          sets a given WP (WP#,lat, lon, alt, flags)
 #define MSP_SELECT_SETTING       210   //in message          Select Setting Number (0-2)
+#define MSP_SET_HEAD             211   //in message          define a new heading hold direction
 
-#define MSP_SPEK_BIND            240   //in message          no param
+#define MSP_BIND                 240   //in message          no param
 
 #define MSP_EEPROM_WRITE         250   //in message          no param
 
@@ -160,42 +163,47 @@ void serialCom() {
       uint8_t bytesTXBuff = ((uint8_t)(serialHeadTX[CURRENTPORT]-serialTailTX[CURRENTPORT]))%TX_BUFFER_SIZE; // indicates the number of occupied bytes in TX buffer
       if (bytesTXBuff > TX_BUFFER_SIZE - 50 ) return; // ensure there is enough free TX buffer to go further (50 bytes margin)
       c = SerialRead(CURRENTPORT);
-  
-      if (c_state[CURRENTPORT] == IDLE) {
-        c_state[CURRENTPORT] = (c=='$') ? HEADER_START : IDLE;
-        if (c_state[CURRENTPORT] == IDLE) evaluateOtherData(c); // evaluate all other incoming serial data
-      } else if (c_state[CURRENTPORT] == HEADER_START) {
-        c_state[CURRENTPORT] = (c=='M') ? HEADER_M : IDLE;
-      } else if (c_state[CURRENTPORT] == HEADER_M) {
-        c_state[CURRENTPORT] = (c=='<') ? HEADER_ARROW : IDLE;
-      } else if (c_state[CURRENTPORT] == HEADER_ARROW) {
-        if (c > INBUF_SIZE) {  // now we are expecting the payload size
+      #ifdef SUPPRESS_ALL_SERIAL_MSP
+        // no MSP handling, so go directly
+        evaluateOtherData(c);
+      #else
+        // regular data handling to detect and handle MSP and other data
+        if (c_state[CURRENTPORT] == IDLE) {
+          c_state[CURRENTPORT] = (c=='$') ? HEADER_START : IDLE;
+          if (c_state[CURRENTPORT] == IDLE) evaluateOtherData(c); // evaluate all other incoming serial data
+        } else if (c_state[CURRENTPORT] == HEADER_START) {
+          c_state[CURRENTPORT] = (c=='M') ? HEADER_M : IDLE;
+        } else if (c_state[CURRENTPORT] == HEADER_M) {
+          c_state[CURRENTPORT] = (c=='<') ? HEADER_ARROW : IDLE;
+        } else if (c_state[CURRENTPORT] == HEADER_ARROW) {
+          if (c > INBUF_SIZE) {  // now we are expecting the payload size
+            c_state[CURRENTPORT] = IDLE;
+            continue;
+          }
+          dataSize[CURRENTPORT] = c;
+          offset[CURRENTPORT] = 0;
+          checksum[CURRENTPORT] = 0;
+          indRX[CURRENTPORT] = 0;
+          checksum[CURRENTPORT] ^= c;
+          c_state[CURRENTPORT] = HEADER_SIZE;  // the command is to follow
+        } else if (c_state[CURRENTPORT] == HEADER_SIZE) {
+          cmdMSP[CURRENTPORT] = c;
+          checksum[CURRENTPORT] ^= c;
+          c_state[CURRENTPORT] = HEADER_CMD;
+        } else if (c_state[CURRENTPORT] == HEADER_CMD && offset[CURRENTPORT] < dataSize[CURRENTPORT]) {
+          checksum[CURRENTPORT] ^= c;
+          inBuf[offset[CURRENTPORT]++][CURRENTPORT] = c;
+        } else if (c_state[CURRENTPORT] == HEADER_CMD && offset[CURRENTPORT] >= dataSize[CURRENTPORT]) {
+          if (checksum[CURRENTPORT] == c) {  // compare calculated and transferred checksum
+            evaluateCommand();  // we got a valid packet, evaluate it
+          }
           c_state[CURRENTPORT] = IDLE;
-          continue;
         }
-        dataSize[CURRENTPORT] = c;
-        offset[CURRENTPORT] = 0;
-        checksum[CURRENTPORT] = 0;
-        indRX[CURRENTPORT] = 0;
-        checksum[CURRENTPORT] ^= c;
-        c_state[CURRENTPORT] = HEADER_SIZE;  // the command is to follow
-      } else if (c_state[CURRENTPORT] == HEADER_SIZE) {
-        cmdMSP[CURRENTPORT] = c;
-        checksum[CURRENTPORT] ^= c;
-        c_state[CURRENTPORT] = HEADER_CMD;
-      } else if (c_state[CURRENTPORT] == HEADER_CMD && offset[CURRENTPORT] < dataSize[CURRENTPORT]) {
-        checksum[CURRENTPORT] ^= c;
-        inBuf[offset[CURRENTPORT]++][CURRENTPORT] = c;
-      } else if (c_state[CURRENTPORT] == HEADER_CMD && offset[CURRENTPORT] >= dataSize[CURRENTPORT]) {
-        if (checksum[CURRENTPORT] == c) {  // compare calculated and transferred checksum
-          evaluateCommand();  // we got a valid packet, evaluate it
-        }
-        c_state[CURRENTPORT] = IDLE;
-      }
+      #endif // SUPPRESS_ALL_SERIAL_MSP
     }
   }
 }
-
+#ifndef SUPPRESS_ALL_SERIAL_MSP
 void evaluateCommand() {
   switch(cmdMSP[CURRENTPORT]) {
    case MSP_SET_RAW_RC:
@@ -246,6 +254,7 @@ void evaluateCommand() {
      #endif
      headSerialReply(0);
      break;
+   #ifdef MULTIPLE_CONFIGURATION_PROFILES
    case MSP_SELECT_SETTING:
      if(!f.ARMED) {
        global_conf.currentSet = read8();
@@ -253,6 +262,11 @@ void evaluateCommand() {
        writeGlobalSet(0);
        readEEPROM();
      }
+     headSerialReply(0);
+     break;
+   #endif
+   case MSP_SET_HEAD:
+     magHold = read16();
      headSerialReply(0);
      break;
    case MSP_IDENT:
@@ -287,7 +301,7 @@ void evaluateCommand() {
                  #if GPS
                    f.GPS_HOME_MODE<<BOXGPSHOME|f.GPS_HOLD_MODE<<BOXGPSHOLD|
                  #endif
-                 #if defined(FIXEDWING) || defined(HELICOPTER) || defined(INFLIGHT_ACC_CALIBRATION) 
+                 #if defined(FIXEDWING) || defined(HELICOPTER)
                    f.PASSTHRU_MODE<<BOXPASSTHRU|
                  #endif
                  #if defined(BUZZER)
@@ -298,6 +312,18 @@ void evaluateCommand() {
                  #endif
                  #if defined(LANDING_LIGHTS_DDR)
                    rcOptions[BOXLLIGHTS]<<BOXLLIGHTS |
+                 #endif
+                 #if defined(VARIOMETER)
+                   rcOptions[BOXVARIO]<<BOXVARIO |
+                 #endif
+                 #if defined(INFLIGHT_ACC_CALIBRATION)
+                   rcOptions[BOXCALIB]<<BOXCALIB |
+                 #endif
+                 #if defined(GOVERNOR_P)
+                   rcOptions[BOXGOV]<<BOXGOV |
+                 #endif
+                 #if defined(OSD_SWITCH)
+                   rcOptions[BOXOSD]<<BOXOSD |
                  #endif
                  f.ARMED<<BOXARM);
        serialize8(global_conf.currentSet);   // current setting
@@ -356,10 +382,11 @@ void evaluateCommand() {
      serialize32(EstAlt);
      serialize16(vario);                  // added since r1172
      break;
-   case MSP_BAT:
-     headSerialReply(3);
+   case MSP_ANALOG:
+     headSerialReply(5);
      serialize8(vbat);
      serialize16(intPowerMeterSum);
+     serialize16(rssi);
      break;
    case MSP_RC_TUNING:
      headSerialReply(7);
@@ -379,6 +406,10 @@ void evaluateCommand() {
        serialize8(conf.D8[i]);
      }
      break;
+   case MSP_PIDNAMES:
+     headSerialReply(strlen_P(pidnames));
+     serializeNames(pidnames);
+     break;
    case MSP_BOX:
      headSerialReply(2*CHECKBOXITEMS);
      for(uint8_t i=0;i<CHECKBOXITEMS;i++) {
@@ -389,9 +420,11 @@ void evaluateCommand() {
      headSerialReply(strlen_P(boxnames));
      serializeNames(boxnames);
      break;
-   case MSP_PIDNAMES:
-     headSerialReply(strlen_P(pidnames));
-     serializeNames(pidnames);
+   case MSP_BOXIDS:
+     headSerialReply(CHECKBOXITEMS);
+     for(uint8_t i=0;i<CHECKBOXITEMS;i++) {
+       serialize8(pgm_read_byte(&(boxids[i])));
+     }
      break;
    case MSP_MISC:
      headSerialReply(2);
@@ -406,33 +439,50 @@ void evaluateCommand() {
    #if defined(USE_MSP_WP)    
    case MSP_WP:
      {
-      uint8_t wp_no = read8();           //get the wp number  
-      headSerialReply(12);
-      if (wp_no == 0) {
-        serialize8(0);                   //wp0
-        serialize32(GPS_home[LAT]);
-        serialize32(GPS_home[LON]);
-        serialize16(0);                  //altitude will come here 
-        serialize8(0);                   //nav flag will come here
-      } else if (wp_no == 16)
-      {
-        serialize8(16);                  //wp16
-        serialize32(GPS_hold[LAT]);
-        serialize32(GPS_hold[LON]);
-        serialize16(0);                  //altitude will come here 
-        serialize8(0);                   //nav flag will come here
-      } 
+       int32_t lat = 0,lon = 0;
+       uint8_t wp_no = read8();        //get the wp number  
+       headSerialReply(18);
+       if (wp_no == 0) {
+         lat = GPS_home[LAT];
+         lon = GPS_home[LON];
+       } else if (wp_no == 16) {
+         lat = GPS_hold[LAT];
+         lon = GPS_hold[LON];
+       }
+       serialize8(wp_no);
+       serialize32(lat);
+       serialize32(lon);
+       serialize32(AltHold);           //altitude (cm) will come here -- temporary implementation to test feature with apps
+       serialize16(0);                 //heading  will come here (deg)
+       serialize16(0);                 //time to stay (ms) will come here 
+       serialize8(0);                  //nav flag will come here
      }
      break;
    case MSP_SET_WP:
      {
-      uint8_t wp_no = read8();          //get the wp number  
-      if (wp_no == 0) {
-        GPS_home[LAT] = read32();
-        GPS_home[LON] = read32();
-        read32();                       // future: to set altitude
-        read8();                        // future: to set nav flag
-      }
+       int32_t lat = 0,lon = 0,alt = 0;
+       uint8_t wp_no = read8();        //get the wp number
+       lat = read32();
+       lon = read32();
+       alt = read32();                 // to set altitude (cm)
+       read16();                       // future: to set heading (deg)
+       read16();                       // future: to set time to stay (ms)
+       read8();                        // future: to set nav flag
+       if (wp_no == 0) {
+         GPS_home[LAT] = lat;
+         GPS_home[LON] = lon;
+         f.GPS_HOME_MODE = 0;          // with this flag, GPS_set_next_wp will be called in the next loop -- OK with SERIAL GPS / OK with I2C GPS
+         f.GPS_FIX_HOME  = 1;
+         if (alt != 0) AltHold = alt;  // temporary implementation to test feature with apps
+       } else if (wp_no == 16) {       // OK with SERIAL GPS  --  NOK for I2C GPS / needs more code dev in order to inject GPS coord inside I2C GPS
+         GPS_hold[LAT] = lat;
+         GPS_hold[LON] = lon;
+         if (alt != 0) AltHold = alt;  // temporary implementation to test feature with apps
+         #if !defined(I2C_GPS)
+           nav_mode      = NAV_MODE_WP;
+           GPS_set_next_wp(&GPS_hold[LAT],&GPS_hold[LON]);
+         #endif
+       }
      }
      headSerialReply(0);
      break;
@@ -442,7 +492,7 @@ void evaluateCommand() {
      headSerialReply(0);
      break;
    case MSP_ACC_CALIBRATION:
-     if(!f.ARMED) calibratingA=400;
+     if(!f.ARMED) calibratingA=512;
      headSerialReply(0);
      break;
    case MSP_MAG_CALIBRATION:
@@ -450,7 +500,7 @@ void evaluateCommand() {
      headSerialReply(0);
      break;
 #if defined(SPEK_BIND)
-   case MSP_SPEK_BIND:
+   case MSP_BIND:
      spekBind();  
      headSerialReply(0);
      break;
@@ -481,59 +531,67 @@ void evaluateCommand() {
   }
   tailSerialReply();
 }
+#endif // SUPPRESS_ALL_SERIAL_MSP
 
 // evaluate all other incoming serial data
 void evaluateOtherData(uint8_t sr) {
-  switch (sr) {
-  // Note: we may receive weird characters here which could trigger unwanted features during flight.
-  //       this could lead to a crash easily.
-  //       Please use if (!f.ARMED) where neccessary
-    #ifdef LCD_CONF
-    case 's':
-    case 'S':
-      if (!f.ARMED) configurationLoop();
-      break;
-    #endif
-    #if defined(LCD_TELEMETRY) && defined(LCD_TEXTSTAR)
-    case 'A': // button A press
-      toggle_telemetry(1);
-      break;
-    case 'B': // button B press
-      toggle_telemetry(2);
-      break;
-    case 'C': // button C press
-      toggle_telemetry(3);
-      break;
-    case 'D': // button D press
-      toggle_telemetry(4);
-      break;
-    case 'a': // button A release
-    case 'b': // button B release
-    case 'c': // button C release
-    case 'd': // button D release
-      break;
-    #endif
-    #ifdef LCD_TELEMETRY
-    case '0':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case '7':
-    case '8':
-    case '9':
-    #if defined(LOG_VALUES) && defined(DEBUG)
-    case 'R':
-    #endif
-    #ifdef DEBUG
-    case 'F':
-    #endif
-      toggle_telemetry(sr);
-      break;
-    #endif // LCD_TELEMETRY
-  }
+  #ifndef SUPPRESS_OTHER_SERIAL_COMMANDS
+    switch (sr) {
+    // Note: we may receive weird characters here which could trigger unwanted features during flight.
+    //       this could lead to a crash easily.
+    //       Please use if (!f.ARMED) where neccessary
+      #ifdef LCD_CONF
+        case 's':
+        case 'S':
+          if (!f.ARMED) configurationLoop();
+          break;
+      #endif
+      #ifdef LOG_PERMANENT_SHOW_AT_L
+        case 'L':
+          if (!f.ARMED) dumpPLog(1);
+          break;
+        #endif
+        #if defined(LCD_TELEMETRY) && defined(LCD_TEXTSTAR)
+        case 'A': // button A press
+          toggle_telemetry(1);
+          break;
+        case 'B': // button B press
+          toggle_telemetry(2);
+          break;
+        case 'C': // button C press
+          toggle_telemetry(3);
+          break;
+        case 'D': // button D press
+          toggle_telemetry(4);
+          break;
+        case 'a': // button A release
+        case 'b': // button B release
+        case 'c': // button C release
+        case 'd': // button D release
+          break;
+      #endif
+      #ifdef LCD_TELEMETRY
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+      #if defined(LOG_VALUES) || defined(DEBUG)
+        case 'R':
+      #endif
+      #ifdef DEBUG
+        case 'F':
+      #endif
+          toggle_telemetry(sr);
+          break;
+      #endif // LCD_TELEMETRY
+    }
+  #endif // SUPPRESS_OTHER_SERIAL_COMMANDS
 }
 
 // *******************************************************
