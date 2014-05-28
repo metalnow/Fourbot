@@ -823,7 +823,7 @@ void go_arm() {
       #endif
     }
   } else if(!f.ARMED) { 
-    blinkLED(2,255,1);
+    blinkLED(2,800,1);
     alarmArray[8] = 1;
   }
 }
@@ -1173,8 +1173,7 @@ void loop () {
  
   } else { // not in rc loop
     static uint8_t taskOrder=0; // never call all functions in the same loop, to avoid high delay spikes
-    if(taskOrder>4) taskOrder-=5;
-    switch (taskOrder) {
+    switch (taskOrder % 5) {
       case 0:
         taskOrder++;
         #if MAG
@@ -1241,6 +1240,7 @@ void loop () {
       }
     }
   #endif
+
 
  //*********************************** 
  
