@@ -31,7 +31,7 @@
     //#define BI
     //#define TRI
     //#define QUADP
-    //#define QUADX
+    #define QUADX
     //#define Y4
     //#define Y6
     //#define HEX6
@@ -53,13 +53,13 @@
        This is the minimum value that allow motors to run at a idle speed  */
     //#define MINTHROTTLE 1300 // for Turnigy Plush ESCs 10A
     //#define MINTHROTTLE 1120 // for Super Simple ESCs 10A
-    //#define MINTHROTTLE 1064 // special ESC (simonk)
+    #define MINTHROTTLE 1064 // special ESC (simonk)
     //#define MINTHROTTLE 1050 // for brushed ESCs like ladybird
-    #define MINTHROTTLE 1150 // (*)
+    //#define MINTHROTTLE 1150 // (*)
 
   /****************************    Motor maxthrottle    *******************************/
     /* this is the maximum value for the ESCs at full power, this value can be increased up to 2000 */
-    #define MAXTHROTTLE 1850
+    #define MAXTHROTTLE 2000
 
   /****************************    Mincommand          *******************************/
     /* this is the value for the ESCs when they are not armed
@@ -83,7 +83,7 @@
          please submit any correction to this list.
            Note from Alex: I only own some boards, for other boards, I'm not sure, the info was gathered via rc forums, be cautious */
       //#define FFIMUv1         // first 9DOF+baro board from Jussi, with HMC5843                   <- confirmed by Alex
-      //#define FFIMUv2         // second version of 9DOF+baro board from Jussi, with HMC5883       <- confirmed by Alex
+      #define FFIMUv2         // second version of 9DOF+baro board from Jussi, with HMC5883       <- confirmed by Alex
       //#define FREEIMUv1       // v0.1 & v0.2 & v0.3 version of 9DOF board from Fabio
       //#define FREEIMUv03      // FreeIMU v0.3 and v0.3.1
       //#define FREEIMUv035     // FreeIMU v0.3.5 no baro
@@ -295,7 +295,7 @@
     #define SERVO_ENDPOINT_LOW  {1020,1020,1020,1020,1020,1020,1020,1020};
 
     /* Limit the range of Collective Pitch. 100% is Full Range each way and position for Zero Pitch */
-    #define COLLECTIVE_RANGE { 80, 0, 80 }// {Min%, ZeroPitch offset from 1500, Max%}.
+    #define COLLECTIVE_RANGE { 80, 1500, 80 }// {Min%, ZeroPitch offset from 1500, Max%}.
     #define YAW_CENTER             1500      // Use servo[5] SERVO_ENDPOINT_HIGH/LOW for the endpoits.
     #define YAWMOTOR                 0       // If a motor is used as YAW Set to 1 else set to 0.
 
@@ -483,7 +483,7 @@
   /******                Serial com speed    *********************************/
     /* This is the speed of the serial interfaces */
     #define SERIAL0_COM_SPEED 115200
-    #define SERIAL1_COM_SPEED 115200
+    #define SERIAL1_COM_SPEED 57600
     #define SERIAL2_COM_SPEED 115200
     #define SERIAL3_COM_SPEED 115200
 
@@ -510,7 +510,7 @@
       //#define ITG3200_LPF_256HZ     // This is the default setting, no need to uncomment, just for reference
       //#define ITG3200_LPF_188HZ
       //#define ITG3200_LPF_98HZ
-      //#define ITG3200_LPF_42HZ
+      #define ITG3200_LPF_42HZ
       //#define ITG3200_LPF_20HZ
       //#define ITG3200_LPF_10HZ      // Use this only in extreme cases, rather change motors and/or props
 
@@ -555,7 +555,7 @@
 
   /************************        AP FlightMode        **********************************/
     /* Temporarily Disables GPS_HOLD_MODE to be able to make it possible to adjust the Hold-position when moving the sticks.*/
-    #define AP_MODE 40  // Create a deadspan for GPS.
+    #define AP_MODE 20  // Create a deadspan for GPS.
         
   /************************   Assisted AcroTrainer    ************************************/
     /* Train Acro with auto recovery. Value set the point where ANGLE_MODE takes over.
@@ -643,7 +643,7 @@
        note: only the RX PIN is used in case of NMEA mode, the GPS is not configured by multiwii
        in NMEA mode the GPS must be configured to output GGA and RMC NMEA sentences (which is generally the default conf for most GPS devices)
        at least 5Hz update rate. uncomment the first line to select the GPS serial port of the arduino */
-    //#define GPS_SERIAL 2 // should be 2 for flyduino v2. It's the serial port number on arduino MEGA
+    #define GPS_SERIAL 2 // should be 2 for flyduino v2. It's the serial port number on arduino MEGA
     //#define GPS_BAUD   57600
     #define GPS_BAUD   115200
 
@@ -655,7 +655,7 @@
        With UBLOX and MTK_BINARY you don't have to use GPS_FILTERING in multiwii code !!! */
 
     
-    //#define NMEA
+    #define NMEA
     //#define UBLOX
     //#define MTK_BINARY16
     //#define MTK_BINARY19
@@ -704,7 +704,7 @@
 
     #define GPS_LEAD_FILTER                      // Adds a forward predictive filterig to compensate gps lag. Code based on Jason Short's lead filter implementation
     
-    //#define GPS_FILTERING                        // add a 5 element moving average filter to GPS coordinates, helps eliminate gps noise but adds latency comment out to disable
+    #define GPS_FILTERING                        // add a 5 element moving average filter to GPS coordinates, helps eliminate gps noise but adds latency comment out to disable
     #define GPS_WP_RADIUS              200       // if we are within this distance to a waypoint then we consider it reached (distance is in cm)
     #define NAV_SLEW_RATE              30        // Adds a rate control to nav output, will smoothen out nav angle spikes
 
@@ -899,7 +899,7 @@
     //                  123456789.123456
 
   /*************      Support multiple configuration profiles in EEPROM     ************/
-    //#define MULTIPLE_CONFIGURATION_PROFILES
+    #define MULTIPLE_CONFIGURATION_PROFILES
 
 /*************************************************************************************************/
 /*****************                                                                 ***************/
@@ -924,7 +924,7 @@
   /**************************************************************************************/
     /* motors will not spin when the throttle command is in low position
        this is an alternative method to stop immediately the motors */
-    //#define MOTOR_STOP
+    #define MOTOR_STOP
 
     /* some radios have not a neutral point centered on 1500. can be changed here */
     #define MIDRC 1500

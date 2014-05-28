@@ -717,7 +717,7 @@ uint8_t Baro_update() {                            // first UT conversion is sta
     static int32_t baroHistTab[BARO_TAB_SIZE];
     static uint8_t baroHistIdx;
   
-    uint8_t indexplus1 = (baroHistIdx + 1);
+    uint8_t indexplus1 = (baroHistIdx + 1))%BARO_TAB_SIZE;
     if (indexplus1 == BARO_TAB_SIZE) indexplus1 = 0;
     baroHistTab[baroHistIdx] = baroPressure;
     baroPressureSum += baroHistTab[baroHistIdx];

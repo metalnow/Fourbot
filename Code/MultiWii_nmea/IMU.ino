@@ -108,7 +108,7 @@ void computeIMU () {
 #define INV_GYR_CMPF_FACTOR   (1.0f / (GYR_CMPF_FACTOR  + 1.0f))
 #define INV_GYR_CMPFM_FACTOR  (1.0f / (GYR_CMPFM_FACTOR + 1.0f))
 
-#define GYRO_SCALE ((2279 * PI)/((32767.0f / 4.0f ) * 180.0f * 1000000.0f)) //(ITG3200 and MPU6050)
+#define GYRO_SCALE ((2380 * PI)/((32767.0f / 4.0f ) * 180.0f * 1000000.0f)) //(ITG3200 and MPU6050) //should be 2279.44 but 2380 gives better result
 // +-2000/sec deg scale
 // for WMP, empirical value should be #define GYRO_SCALE (1.0f/200e6f)
 // !!!!should be adjusted to the rad/sec and be part defined in each gyro sensor
@@ -211,8 +211,10 @@ void getEstimatedAttitude(){
 
   // Apply complimentary filter (Gyro drift correction)
   // If accel magnitude >1.15G or <0.85G and ACC vector outside of the limit range => we neutralize the effect of accelerometers in the angle estimation.
+  // If accel magnitude >1.4G or <0.6G and ACC vector outside of the limit range => we neutralize the effect of accelerometers in the angle estimation.
   // To do that, we just skip filter, as EstV already rotated by Gyro
-  if (  72 < accMag && accMag < 133 )
+  //if (  72 < accMag && accMag < 133 )
+  if ( ( 36 < accMag && accMag < 196 ) || f.SMALL_ANGLES_25 )
     for (axis = 0; axis < 3; axis++) {
       EstG.A[axis] = (EstG.A[axis] * GYR_CMPF_FACTOR + accSmooth[axis]) * INV_GYR_CMPF_FACTOR;
     }
@@ -273,15 +275,23 @@ uint8_t getEstimatedAltitude(){
   previousT = currentT;
 
   if(calibratingB > 0) {
-    baroGroundPressure = baroPressureSum/(BARO_TAB_SIZE - 1);
+    baroGroundPressure = baroPressureSum/(float)(BARO_TAB_SIZE - 1) + 0.5f;
     calibratingB--;
   }
 
   // pressure relative to ground pressure with temperature compensation (fast!)
   // baroGroundPressure is not supposed to be 0 here
   // see: https://code.google.com/p/ardupilot-mega/source/browse/libraries/AP_Baro/AP_Baro.cpp
-  BaroAlt = log( baroGroundPressure * (BARO_TAB_SIZE - 1)/ (float)baroPressureSum ) * (baroTemperature+27315) * 29.271267f; // in cemtimeter 
-
+  // log(0) is bad!
+  if(baroGroundPressure != 0) {
+    // pressure relative to ground pressure with temperature compensation (fast!)
+    // see: https://code.google.com/p/ardupilot-mega/source/browse/libraries/AP_Baro/AP_Baro.cpp
+    //BaroAlt = log( baroGroundPressure / (baroPressureSum/(float)(BARO_TAB_SIZE - 1)) ) * (baroTemperature+27315) * 29.271267f; // in cemtimeter 
+    BaroAlt = log( baroGroundPressure * (BARO_TAB_SIZE - 1)/ (float)baroPressureSum ) * (baroTemperature+27315) * 29.271267f; // in cemtimeter 	
+  } else {
+    BaroAlt = 0;
+  }
+  
   EstAlt = (EstAlt * 6 + BaroAlt * 2) >> 3; // additional LPF to reduce baro noise (faster by 30 µs)
 
   #if (defined(VARIOMETER) && (VARIOMETER != 2)) || !defined(SUPPRESS_BARO_ALTHOLD)

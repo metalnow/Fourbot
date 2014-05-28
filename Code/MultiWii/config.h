@@ -1024,7 +1024,7 @@
     //                  123456789.123456
 
   /*************      Support multiple configuration profiles in EEPROM     ************/
-    //#define MULTIPLE_CONFIGURATION_PROFILES
+    #define MULTIPLE_CONFIGURATION_PROFILES
 
   /*************      do no reset constants when change of flashed program is detected ***********/
     //#define NO_FLASH_CHECK

@@ -405,10 +405,10 @@ void computeRC() {
       #if defined(FAILSAFE)
         uint16_t rcval = readRawRC(chan);
         if(rcval>FAILSAFE_DETECT_TRESHOLD || chan > 3) {        // update controls channel only if pulse is above FAILSAFE_DETECT_TRESHOLD
-          rcData4Values[chan][rc4ValuesIndex] = rcval;
+          rcData4Values[chan][rc4ValuesIndex%4] = rcval;
         }
       #else
-        rcData4Values[chan][rc4ValuesIndex] = readRawRC(chan);
+        rcData4Values[chan][rc4ValuesIndex%4] = readRawRC(chan);
       #endif
       rcDataMean[chan] = 0;
       for (a=0;a<4;a++) rcDataMean[chan] += rcData4Values[chan][a];
@@ -796,12 +796,12 @@ void spekBind() {
   pinMode(SPEK_BIND_POWER,OUTPUT);
   
   while(1) {  //Do not return.  User presses reset button to return to normal. 
-    blinkLED(4,255,1);
+    blinkLED(4,300,1);
     digitalWrite(SPEK_BIND_POWER,LOW); // Power off sat
     pinMode(SPEK_BIND_DATA, OUTPUT); 
     digitalWrite(SPEK_BIND_DATA,LOW); 
     delay(1000); 
-    blinkLED(4,255,1);
+    blinkLED(4,300,1);
     
     digitalWrite(SPEK_BIND_POWER,HIGH); // Power on sat
     delay(10);
