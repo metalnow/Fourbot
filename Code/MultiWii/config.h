@@ -12,11 +12,13 @@
  * 5 - ALTERNATE SETUP - select alternate RX (SBUS, PPM, etc.), alternate ESC-range, etc. here
  * 6 - OPTIONAL FEATURES - enable nice to have features here (FlightModes, LCD, telemetry, battery monitor etc.)
  * 7 - TUNING & DEVELOPER - if you know what you are doing; you have been warned
+ *     - (ESCs calibration, Dynamic Motor/Prop Balancing, Diagnostics,Memory savings.....)
  */
 
 /* Notes:
- * 1. parameters marked with (*) in the comment are stored in eeprom and can be tweaked via serial monitor or LCD.
- *    Changing those values in config.h and upload will require a 'Reset' from the GUI to take effect
+ * 1. parameters marked with (*) in the comment are stored in eeprom and cannot currently be changed via the GUI but
+ *    can be changed via serial monitor or LCD.
+ * 2. parameters marked with (**) in the comment are stored in eeprom and can be changed via the GUI
  */
 
 
@@ -143,6 +145,7 @@
       //#define RCNet_FC           // RCNet FC with MPU6050 and MS561101BA  http://www.rcnet.com
       //#define RCNet_FC_GPS       // RCNet FC with MPU6050 + MS561101BA + HMC5883L + UBLOX GPS http://www.rcnet.com
       //#define FLYDU_ULTRA        // MEGA+10DOF+MT3339 FC
+      //#define DIYFLYING_MAGE_V1  // diyflying 10DOF mega board with MPU6050 + HMC5883L + BMP085 http://www.indoor-flying.hk
 
       
     /***************************    independent sensors    ********************************/
@@ -184,9 +187,9 @@
       //#define ADCACC
 
       /* enforce your individual sensor orientation - even overrides board specific defaults */
-      //#define FORCE_ACC_ORIENTATION(X, Y, Z)  {accADC[ROLL]  =  Y; accADC[PITCH]  = -X; accADC[YAW]  = Z;}
-      //#define FORCE_GYRO_ORIENTATION(X, Y, Z) {gyroADC[ROLL] = -Y; gyroADC[PITCH] =  X; gyroADC[YAW] = Z;}
-      //#define FORCE_MAG_ORIENTATION(X, Y, Z)  {magADC[ROLL]  =  X; magADC[PITCH]  =  Y; magADC[YAW]  = Z;}
+      //#define FORCE_ACC_ORIENTATION(X, Y, Z)  {imu.accADC[ROLL]  =  Y; imu.accADC[PITCH]  = -X; imu.accADC[YAW]  = Z;}
+      //#define FORCE_GYRO_ORIENTATION(X, Y, Z) {imu.gyroADC[ROLL] = -Y; imu.gyroADC[PITCH] =  X; imu.gyroADC[YAW] = Z;}
+      //#define FORCE_MAG_ORIENTATION(X, Y, Z)  {imu.magADC[ROLL]  =  X; imu.magADC[PITCH]  =  Y; imu.magADC[YAW]  = Z;}
 
       /* Board orientation shift */
       /* If you have frame designed only for + mode and you cannot rotate FC phisycally for flying in X mode (or vice versa)
@@ -225,7 +228,12 @@
     /* The following lines apply only for a pitch/roll tilt stabilization system. Uncomment the first or second line to activate it */
     //#define SERVO_MIX_TILT
     //#define SERVO_TILT
-    #define TILT_PITCH_MIN    1020    //servo travel min, don't set it below 1020
+
+    /* The following lines enable pitch and roll servo streetching to values defined as TILT_MIN and TILT_MAX 
+       This work only with haedware PWM's for gimbal servos (MEGA board with uncommented MEGA_HW_PWM_SERVOS option) 
+       Tipical TILT_MIN should be about 500 and TILT_MAX abiut 2500 for 180 degres servo range */
+    //#define SERVO_STRETH
+    #define TILT_PITCH_MIN    1020    //servo travel min, don't set it below 1020 except mega HW pwm's is used
     #define TILT_PITCH_MAX    2000    //servo travel max, max value=2000
     #define TILT_PITCH_MIDDLE 1500    //servo neutral value
     #define TILT_PITCH_PROP   10      //servo proportional (tied to angle) ; can be negative to invert movement
@@ -242,6 +250,29 @@
     #define CAM_SERVO_LOW 1020   // the position of LOW state servo
     #define CAM_TIME_HIGH 1000   // the duration of HIGH state servo expressed in ms
     #define CAM_TIME_LOW 1000    // the duration of LOW state servo expressed in ms
+    
+  /***********************          Cam Stabilisation by NHADRIAN            ***********************/
+    /* Modified cam stabilization, where I use parameters to pre-compensate the servo speed and inertia, regarding to angular velocity and angular acceleration. 
+       Basically code sends greater PWM values when fast movements for servos to force them to move fast enough. Works with analog and digital servos as well */
+
+    //#define SERVO_TILT_NHADRIAN          
+    
+    /* Parameters for Cam Stabilization by NHADRIAN */
+    
+    #define TILT_PITCH_I    -18   // parameter for servo speed compensation (regarding to angular velocity)
+    #define TILT_ROLL_I     -18   // parameter for servo speed compensation (regarding to angular velocity)
+    #define TILT_PITCH_D    1     // deadband size parameter near zero - for really small movements
+    #define TILT_ROLL_D     3     // deadband size parameter near zero - for really small movements
+    #define TILT_PITCH_P   -5     // parameter for servo inertia compensation (regarding to angular acceleration)
+    #define TILT_ROLL_P    -5     // parameter for servo inertia compensation (regarding to angular acceleration)
+    
+  /***********************          PITCH/ROLL mix to servos for FPV by NHADRIAN      ***********************/
+     /* PITCH/ROLL mix to servos  
+        This function allows to mix PITCH/ROLL stick movements to the camera stabilization, to help orientation when flying in FPV...
+        Use together with SERVO_TIT_NHADRIAN              */
+    
+    #define PITCH_TO_TILT 5       // ratio between pitch-stick movement and camera movement - use negative value to change direction
+    //#define ROLL_TO_TILT 5        // ratio between roll-stick movement and camera movement - use negative value to change direction
 
   /***********************          Flying Wing                   ***********************/
     /* you can change change servo orientation and servo min/max values here
@@ -333,7 +364,6 @@
      */
     //#define MY_PRIVATE_MIXING "filename.h"
     //#define LEAVE_HEADROOM_FOR_MOTORS 4 // leave room for gyro corrrections only for first 4 motors
-
 /*************************************************************************************************/
 /*****************                                                                 ***************/
 /****************  SECTION  3 - RC SYSTEM SETUP                                            *******/
@@ -465,6 +495,8 @@
   /* you may need to change PINx and PORTx plus #shift according to the desired pin! */
   //#define OVERRIDE_V_BATPIN                   A0 // instead of A3    // Analog PIN 3
 
+  //#define OVERRIDE_PSENSORPIN                 A1 // instead of A2    // Analog PIN 2
+
   //#define OVERRIDE_LEDPIN_PINMODE             pinMode (A1, OUTPUT); // use A1 instead of d13
   //#define OVERRIDE_LEDPIN_TOGGLE              PINC |= 1<<1; // PINB |= 1<<5;     //switch LEDPIN state (digital PIN 13)
   //#define OVERRIDE_LEDPIN_OFF                 PORTC &= ~(1<<1); // PORTB &= ~(1<<5);
@@ -540,14 +572,33 @@
       //#define MMSERVOGIMBAL                  // Active Output Moving Average Function for Servos Gimbal
       //#define MMSERVOGIMBALVECTORLENGHT 32   // Lenght of Moving Average Vector
 
-
-
+  /************************    Analog Reads              **********************************/
+    /* if you want faster analog Reads, enable this. It may result in less accurate results, especially for more than one analog channel */
+    //#define FASTER_ANALOG_READS
 
 /*************************************************************************************************/
 /*****************                                                                 ***************/
 /****************  SECTION  6 - OPTIONAL FEATURES                                          *******/
 /*****************                                                                 ***************/
 /*************************************************************************************************/
+
+  /************************        Angele throttle correction         ********************/
+  /* Automatically increase throttle based on the angle of the copter
+     Original idea by Kraut Rob, first implementation HAdrian							*/
+
+  //#define THROTTLE_ANGLE_CORRECTION 40
+  
+ /*************************        Advanced Headfree Mode             ********************/
+ /* In Advanced Headfree mode when the copter is farther than ADV_HEADFREE_RANGE meters then 
+    the  bearing between home and copter position will become the control direction 
+	IF copter come closer than ADV_HEADFREE_RANGE meters, then the control direction freezed to the 
+	bearing between home and copter at the point where it crosses the ADV_HEADFREE_RANGE meter distance
+	first implementation by HAdrian, mods by EOSBandi
+ */
+
+   //#define ADVANCED_HEADFREE									//Advanced headfree mode is enabled when this is uncommented
+   //#define ADV_HEADFREE_RANGE 15								//Range where advanced headfree mode activated
+
 
   /************************        continuous gyro calibration        ********************/
   /* Gyrocalibration will be repeated if copter is moving during calibration. */
@@ -567,14 +618,36 @@
   /********                          Failsafe settings                 ********************/
     /* Failsafe check pulses on four main control channels CH1-CH4. If the pulse is missing or bellow 985us (on any of these four channels) 
        the failsafe procedure is initiated. After FAILSAFE_DELAY time from failsafe detection, the level mode is on (if ACC or nunchuk is avaliable),
-       PITCH, ROLL and YAW is centered and THROTTLE is set to FAILSAFE_THR0TTLE value. You must set this value to descending about 1m/s or so 
+       PITCH, ROLL and YAW is centered and THROTTLE is set to FAILSAFE_THROTTLE value. You must set this value to descending about 1m/s or so
        for best results. This value is depended from your configuration, AUW and some other params.  Next, afrer FAILSAFE_OFF_DELAY the copter is disarmed, 
        and motors is stopped. If RC pulse coming back before reached FAILSAFE_OFF_DELAY time, after the small quard time the RC control is returned to normal. */
-    //#define FAILSAFE                                // uncomment  to activate the failsafe function
-    #define FAILSAFE_DELAY     10                     // Guard time for failsafe activation after signal lost. 1 step = 0.1sec - 1sec in example
-    #define FAILSAFE_OFF_DELAY 200                    // Time for Landing before motors stop in 0.1sec. 1 step = 0.1sec - 20sec in example
+    //#define FAILSAFE                                  // uncomment  to activate the failsafe function
+    #define FAILSAFE_DELAY     5                      // Guard time for failsafe activation after signal lost. 1 step = 0.1sec - 1sec in example
+    #define FAILSAFE_OFF_DELAY 1000                    // Time for Landing before motors stop in 0.1sec. 1 step = 0.1sec - 20sec in example
     #define FAILSAFE_THROTTLE  (MINTHROTTLE + 200)    // (*) Throttle level used for landing - may be relative to MINTHROTTLE - as in this case
 
+  /*****************                Failsafe descending to the ground by BARO          *********************************/
+  /* For vario-controlled descending instead of having a fix throttle value, uncomment FAILSAFE_ALT_MODE. This allows to descend with preset vario. 
+     When flying on high altitudes, and would like to descend faster than apply FAILSAFE_SAFE_ALT and FAILSAFE_FAST_VARIO. 
+       This case will let copter descend faster from high altitude till reach the safety altitude, after will slow down to slow vario.
+     If you have GPS and would like to have RTH activated when in failsafe, uncomment FAILSAFE_RTH_MODE. Please note that in this case FAILSAFE_ALT_MODE doesn't have to be uncommented, 
+       if GPS signal is weak, failsafe will work in FAILSAFE_ALT_MODE. 
+     Both with work only with FAILSAFE uncommented! Also Please note that both modes will work even if SUPPRESS_BARO_ALTHOLD is uncommented, so you can still save some space with better failsafe alt handling! 
+
+     Please note that FAILSAE_OFF_DELAY is still active for security reasons, so set up long time enough to be able to RTH before this timer ends because motors will stop!!!*/
+  
+    //#define FAILSAFE_ALT_MODE             // uncomment for descending with constant vario if in Failsafe - use with FAILSAFE and define the FAILSAFE_SLOW_VARIO
+    #define FAILSAFE_SLOW_VARIO   50      // in cm/s - slow desceding speed under SAFETY_ALT, this is default is SAFETY_ALT is not used.  - maximum 250!!!
+    #define FAILSAFE_FAST_VARIO   100     // in cm/s - fast desceding speed over SAFETY_ALT, maximum 250!!!
+    #define FAILSAFE_SAFETY_ALT   100     // in cm   - safety altitude, where to slow down descending before landing, in cm!!!
+
+    //#define FAILSAFE_RTH_MODE             // if GPS present and ready, copter starts RTH when signal lost. When signal is back, control is back again. 
+    #define FAILSAFE_RTH_VARIO    100     // in cm/s - vario for RTH function for failsafe, maximum 250!!!
+    #define FAILSAFE_RTH_ALT      1000    // in cm   - minimum RTH altitude for failsafe. If copter is higher than this, it will keep altitude.
+    #define FAILSAFE_RTH_HOME     400     // in cm   - home altitude for RTH, copter will descend to this altitude and wait.
+    #define FAILSAFE_RTH_DELAY    15      // in s    - safety delay, after reaching HOME altitude, it'll land in FAILSAFE_ALT_MODE when safety delay terminates.
+
+    #define FAILSAFE_DETECT_TRESHOLD  985     //Failsafe threshold (in us)
 
   /*****************                DFRobot LED RING    *********************************/
     /* I2C DFRobot LED RING communication */
@@ -582,14 +655,17 @@
 
   /********************************    LED FLASHER    ***********************************/
     //#define LED_FLASHER
-    //#define LED_FLASHER_DDR DDRB
-    //#define LED_FLASHER_PORT PORTB
-    //#define LED_FLASHER_BIT PORTB4
+    //#define LED_FLASHER_DDR                   DDRC
+    //#define LED_FLASHER_PORT                  PORTC
+    //#define LED_FLASHER_BIT                   PORTC4
     //#define LED_FLASHER_INVERT
-    //#define LED_FLASHER_SEQUENCE        0b00000000      // leds OFF
-    //#define LED_FLASHER_SEQUENCE_ARMED  0b00000101      // create double flashes
-    //#define LED_FLASHER_SEQUENCE_MAX    0b11111111      // full illumination
-    //#define LED_FLASHER_SEQUENCE_LOW    0b00000000      // no illumination
+    //#define LED_FLASHER_SEQUENCE              0b00000000      // leds OFF
+    //#define LED_FLASHER_SEQUENCE_ARMED        0b11111111      // pattern when ARMED
+    //#define LED_FLASHER_SEQUENCE_MAX          0b11111111      // full illumination
+    //#define LED_FLASHER_SEQUENCE_LOW          0b00000000      // no illumination
+    //#define LED_FLASHER_SEQUENCE_VBAT_WARN1   0b11111110      // VBAT alarm LED sequence - USE together with LED_FLASHER_SEQUENCE
+    //#define LED_FLASHER_SEQUENCE_VBAT_WARN2   0b11111010      // VBAT alarm LED sequence - USE together with LED_FLASHER_SEQUENCE
+    //#define LED_FLASHER_SEQUENCE_FAILSAFE     0b01010101      // Failsafe LED sequence - USE together with LED_FLASHER_SEQUENCE
 
 
   /*******************************    Landing lights    *********************************/
@@ -627,11 +703,8 @@
 
     /* introduce a deadband around the stick center
        Must be greater than zero, comment if you dont want a deadband on roll, pitch and yaw */
-    //#define DEADBAND 6
+    //#define DEADBAND 3
 
-    /* defines the neutral zone of throttle stick during altitude hold, default setting is
-       +/-40 uncommend and change the value below if you want to change it. */
-    //#define ALT_HOLD_THROTTLE_NEUTRAL_ZONE 40 
 
 
   /**************************************************************************************/
@@ -643,7 +716,10 @@
        note: only the RX PIN is used in case of NMEA mode, the GPS is not configured by multiwii
        in NMEA mode the GPS must be configured to output GGA and RMC NMEA sentences (which is generally the default conf for most GPS devices)
        at least 5Hz update rate. uncomment the first line to select the GPS serial port of the arduino */
-    #define GPS_SERIAL 2 // should be 2 for flyduino v2. It's the serial port number on arduino MEGA
+       
+    #define GPS_SERIAL 2         // should be 2 for flyduino v2. It's the serial port number on arduino MEGA
+    //#define GPS_PROMINI_SERIAL   // Will Autosense if GPS is connected when ardu boots.
+    
     //#define GPS_BAUD   57600
     #define GPS_BAUD   115200
 
@@ -661,8 +737,7 @@
     //#define MTK_BINARY19
     //#define INIT_MTK_GPS        // initialize MTK GPS for using selected speed, 5Hz update rate and GGA & RMC sentence or binary settings
 
-    //#define GPS_PROMINI_SERIAL    57600 // Will Autosense if GPS is connected when ardu boots
-   
+    
     /* I2C GPS device made with an independant arduino + GPS device
        including some navigation functions
        contribution from EOSBandi   http://code.google.com/p/i2c-gps-nav/ 
@@ -700,7 +775,8 @@
        Convert the degree+minutes into decimal degree by ==> degree+minutes*(1/60)
        Note the sign on declination it could be negative or positive (WEST or EAST) */
     //#define MAG_DECLINIATION  3.96f              //For Budapest Hungary.
-    #define MAG_DECLINIATION  0.0f
+    #define MAG_DECLINIATION  0.0f   //(**)
+
 
     #define GPS_LEAD_FILTER                      // Adds a forward predictive filterig to compensate gps lag. Code based on Jason Short's lead filter implementation
     
@@ -708,6 +784,7 @@
     #define GPS_WP_RADIUS              200       // if we are within this distance to a waypoint then we consider it reached (distance is in cm)
     #define NAV_SLEW_RATE              30        // Adds a rate control to nav output, will smoothen out nav angle spikes
 
+    #define WP_NUMBER                  2         //set up the number of WP-s used and stored
 
   /**************************************************************************************/
   /***********************        LCD/OLED - display settings       *********************/
@@ -727,7 +804,7 @@
       //#define OLED_I2C_128x64 // I2C LCD: OLED http://www.multiwii.com/forum/viewtopic.php?f=7&t=1350
 
     /******************************   Display settings   ***********************************/
-      #define LCD_SERIAL_PORT 0    // must be 0 on Pro Mini and single serial boards; Set to your choice on any Mega based board
+      //#define LCD_SERIAL_PORT 0    // must be 0 on Pro Mini and single serial boards; Set to your choice on any Mega based board
 
       //#define SUPPRESS_OLED_I2C_128x64LOGO  // suppress display of OLED logo to save memory
 
@@ -818,12 +895,12 @@
        vbat = [0;1023]*16/VBATSCALE
        must be associated with #define BUZZER ! */
     //#define VBAT              // uncomment this line to activate the vbat code
-    #define VBATSCALE       131 // (*) change this value if readed Battery voltage is different than real voltage
+    #define VBATSCALE       131 // (*) (**) change this value if readed Battery voltage is different than real voltage
     #define VBATNOMINAL     126 // 12,6V full battery nominal voltage - only used for lcd.telemetry
-    #define VBATLEVEL_WARN1 107 // (*) 10,7V
-    #define VBATLEVEL_WARN2  99 // (*) 9.9V
-    #define VBATLEVEL_CRIT   93 // (*) 9.3V - critical condition: if vbat ever goes below this value, permanent alarm is triggered
-    #define NO_VBAT          16  // (*) Avoid beeping without any battery
+    #define VBATLEVEL_WARN1 107 // (*) (**) 10,7V
+    #define VBATLEVEL_WARN2 99 // (*) (**) 9.9V
+    #define VBATLEVEL_CRIT   93 // (*) (**) 9.3V - critical condition: if vbat ever goes below this value, permanent alarm is triggered
+    #define NO_VBAT          16  // Avoid beeping without any battery
 
 
   /********************************************************************/
@@ -838,13 +915,11 @@
        2 - soft: - (good results +-5% for plush and mystery ESCs @ 2S and 3S, not good with SuperSimple ESC)    */
     //#define POWERMETER_SOFT
     //#define POWERMETER_HARD
-    /* PLEVELSCALE is the step size you can use to set alarm */
-    #define PLEVELSCALE 50 // if you change this value for other granularity, you must search for comments in code to change accordingly
-    /* larger PLEVELDIV will get you smaller value for power (mAh equivalent) */
-    #define PLEVELDIV 5000 // (*) default for soft - if you lower PLEVELDIV, beware of overrun in uint32 pMeter
-    #define PLEVELDIVSOFT PLEVELDIV // for soft always equal to PLEVELDIV; for hard set to 5000
-    #define PSENSORNULL 510 // (*) set to analogRead() value for zero current; for I=0A my sensor gives 1/2 Vss; that is approx 2.49Volt;
-    #define PINT2mA 13 // (*) for telemtry display: one integer step on arduino analog translates to mA (example 4.9 / 37 * 100
+    #define PSENSORNULL 510 /* (*) hard only: set to analogRead() value for zero current; for I=0A my sensor
+                                   gives 1/2 Vss; that is approx 2.49Volt; */
+    #define PINT2mA 13     /* (*) hard: one integer step on arduino analog translates to mA (example 4.9 / 37 * 1000) ;
+                                   soft: use fictional value, start with 100.
+                                   for hard and soft: larger PINT2mA will get you larger value for power (mAh equivalent) */
 
   /********************************************************************/
   /****           altitude hold                                    ****/
@@ -864,6 +939,61 @@
    * altitude proportional to stick movement (+/-100 throttle gives about +/-50 cm in 1 second with cycle time about 3-4ms)
    */
   #define ALTHOLD_FAST_THROTTLE_CHANGE
+	
+  /*****************************/
+  /* ALT HOLD code by NHADRIAN */
+  /*****************************/
+  
+  /* Experimental altitude hold code. It uses "vario mode" which means reising/descending vario relates to the throttle stick position.
+     When RTH_ALT_MODE is uncommented, in RTH mode copter rises to defined altitude, and when reaches the target, descends back to defined home altitude.
+       By deffault, copter descends back to RTH altitude, if is higher. When RTH_KEEP_ALT is uncommented, 
+       it means copter will keep altitude if higher than RTH_ALT. Only descends when reached home. 
+     Please note that these modes can be used separated! (So for example, when only RTH_MODE is uncommented, it will return as described previously but for BARO mode
+       natural alt change will be used.
+     For working RTH_ALT_MODE Baro should be enabled with switch!
+     If none of them are uncommented, natural alt change will be used for rapid pilots. It's temporary switch OFF the althold when throttle stick is 
+       out of deadband defined with ALT_HOLD_THROTTLE_NEUTRAL_ZONE
+ 
+  /********** user tunable parameters ************/
+ 
+    //#define VARIO_ALT_MODE                          // define ALT HOLD code
+    //#define VARIO_MODE_CHANGE_BEEP                  // beep if changing between rising/descending  - long beep when entering hoover mode, short beep when changing between rising/descending
+    #define ALT_VARIO_MAX                     200   // in cm/s  - maximum rising/descending vario when full throttle applied  -  maximum 250!!!
+    #define ALT_HOLD_THROTTLE_NEUTRAL_ZONE    50    // in us    - deadband of stick around hovering point when in ALT HOLD is active (us in PWM signal)
+    #define ALT_HOLD_THROTTLE_MIDPOINT        1500  // in us    - if uncommented, this value is used in ALT_HOLD for throttle stick middle point instead of initialThrottleHold parameter.
+
+    //#define RTH_ALT_MODE                            // define RTH custom approach height  
+    #define RTH_KEEP_ALT                            // if the altitude is higher than the RTH_ALT, copter maintains that altitude instead of descending to target - according to Dramida's request
+    #define RTH_VARIO      100                      // in cm/s  - vario used for reaching target altitudes during RTH - maximum 250!!!
+    #define RTH_ALT        1000                     // in cm    - altitude during approach
+    #define HOME_ALT       400                      // in cm    - altitude after reaching home position
+
+    //#define WP_ALT_MODE                             // define WP mode - approach WP altitude with WP vario - USE WITH EZ-GUI and RTH_ALT_MODE 
+    #define WP_VARIO       100                      // in cm/s  - vario used for reaching WP altitude - maximum 250!!!
+
+    #define ALT_SAFETY_DEADBAND      150            // deadband for RTH mode and WP mode. In emergency situations control can be get back with throttle stick
+
+ 
+  /********************************************************************/
+  /****           autoland function                                ****/
+  /********************************************************************/
+
+    /* This feature enables AUTOLAND BOXITEM.
+     * Use together with RTH_ALT_MODE!
+     * Works with valid GPS data only!
+     * when AUTOLAND is active, RTH mode will be activated, so copter first move to home WP, then starts to descend
+     * over SAFETY_ALT vario is the defined FAST_VARIO, under the SLOW_VARIO. This is for slowing down copter before land
+     * the trigger for disarm is the BaroPID value. When copter can't descend anymore (touched the ground), 
+       the RPM will slow down until it reaches low BaroPID enough for DISARM.
+     * Please note that for security reasons, SAFETY DEADBAND is applied, it throttle stick is out of deadband the automatic altitude control will be disabled
+     */
+
+    //#define AUTOLAND
+
+    #define AUTOLAND_FAST_VARIO       100  // vario over safety alt (cm/s)
+    #define AUTOLAND_SLOW_VARIO       25   // vario under safety alt (cm/s)
+    #define AUTOLAND_SAFETY_ALT       400  // safety altitude (cm)
+    #define AUTOLAND_SAFETY_DEADBAND  100  // deadband for AUTOLAND mode. See in description.
 
   /********************************************************************/
   /****           altitude variometer                              ****/
@@ -895,11 +1025,14 @@
      * It must be 16 characters total,
      * The last 4 characters will be overwritten with the version number.
      */
-    #define BOARD_NAME "MultiWii   V-.--"
+    //#define BOARD_NAME "MultiWii   V-.--"
     //                  123456789.123456
 
   /*************      Support multiple configuration profiles in EEPROM     ************/
     #define MULTIPLE_CONFIGURATION_PROFILES
+
+  /*************      do no reset constants when change of flashed program is detected ***********/
+    //#define NO_FLASH_CHECK
 
 /*************************************************************************************************/
 /*****************                                                                 ***************/
@@ -907,17 +1040,10 @@
 /*****************                                                                 ***************/
 /*************************************************************************************************/
 
-  /************ Experimental: force a stable, fixated (high) cycle time       **********/
-    /* when activated, the displayed cycle time in GUI will not be correct.
-     * Tunable via LCD config menu.
-     * value of 0 turns the feature off.
-     */
-    //#define CYCLETIME_FIXATED 9000 // (*)
-
   /**************************************************************************************/
   /********   special ESC with extended range [0-2000] microseconds  ********************/
   /**************************************************************************************/
-    //#define EXT_MOTOR_RANGE
+    //#define EXT_MOTOR_RANGE // using this with wii-esc requires to change MINCOMMAND to 1008 for promini and mega
 
   /**************************************************************************************/
   /***********************     motor, servo and other presets     ***********************/
@@ -946,30 +1072,43 @@
       Pitch   = pin 44
       Roll    = pin 45
       CamTrig = pin 46
-      SERVO4  = pin 11 (assigned to PPM or SPECTRUM CH9 on copter configuration)
-      SERVO5  = pin 12 (assigned to PPM or SPECTRUM CH10 on copter configuration)
-      this option disable other software PWM's for servos - only five hardware controlled servos avaliable
-      */ 
+      SERVO4  = pin 11 (aileron left for fixed wing or TRI YAW SERVO)
+      SERVO5  = pin 12 (aileron right for fixed wing)
+      SERVO6  = pin 6   (rudder for fixed wing)
+      SERVO7  = pin 7   (elevator for fixed wing)
+      SERVO8  = pin 8   (motor for fixed wing)       */ 
+
     //#define MEGA_HW_PWM_SERVOS
-
+    //#define SERVO_RFR_RATE  50    // In Hz, you can set it from 20 to 400Hz, used only in HW PWM mode
+ 
   /********************************************************************/
-  /****           Serial command handling - MSP and other          ****/
+  /****           Memory savings                                   ****/
   /********************************************************************/
 
-    /* to reduce memory footprint, it is possible to suppress handling of serial commands.
+    /* options to counter the general shortage of memory, like with leonardo m32u4 and others */
+
+    /**** suppress handling of serial commands.***
      * This does _not_ affect handling of RXserial, Spektrum or GPS. Those will not be affected and still work the same.
      * Enable either one or both of the following options  */
 
-    /* Remove handling of all commands of the New MultiWii Serial Protocol.
-     * This will disable use of the GUI, winGUI, android apps and any other program that makes use of the MSP.
-     * You must find another way (like LCD_CONF) to tune the parameters or live with the defaults.
-     * If you run a LCD/OLED via i2c or serial/Bluetooth, this is safe to use */
-    //#define SUPPRESS_ALL_SERIAL_MSP // saves approx 2700 bytes
+      /* Remove handling of all commands of the New MultiWii Serial Protocol.
+       * This will disable use of the GUI, winGUI, android apps and any other program that makes use of the MSP.
+       * You must find another way (like LCD_CONF) to tune the parameters or live with the defaults.
+       * If you run a LCD/OLED via i2c or serial/Bluetooth, this is safe to use */
+      //#define SUPPRESS_ALL_SERIAL_MSP // saves approx 2700 bytes
 
-    /* Remove handling of other serial commands.
-     * This includes navigating via serial the lcd.configuration menu, lcd.telemetry and permanent.log .
-     * Navigating via stick inputs on tx is not affected and will work the same.  */
-    //#define SUPPRESS_OTHER_SERIAL_COMMANDS // saves  approx 0 to 100 bytes, depending on features enabled
+      /* Remove handling of other serial commands.
+       * This includes navigating via serial the lcd.configuration menu, lcd.telemetry and permanent.log .
+       * Navigating via stick inputs on tx is not affected and will work the same.  */
+      //#define SUPPRESS_OTHER_SERIAL_COMMANDS // saves  approx 0 to 100 bytes, depending on features enabled
+
+    /**** suppress keeping the defaults for initial setup and reset in the code.
+     * This requires a manual initial setup of the PIDs etc. or load and write from defaults.mwi;
+     * reset in GUI will not work on PIDs
+     */
+    //#define SUPPRESS_DEFAULTS_FROM_GUI
+    
+    //#define DISABLE_SETTINGS_TAB  // Saves ~400bytes on ProMini
 
   /********************************************************************/
   /****           diagnostics                                      ****/
@@ -987,10 +1126,9 @@
      * Writes to end of eeprom - should not conflict with stored parameters yet.
      * Logged values: accumulated lifetime, #powercycle/reset/initialize events, #arm events, #disarm events, last armedTime,
      *                #failsafe@disarm, #i2c_errs@disarm
-     * To activate set to size of eeprom for your mcu: promini 328p: 1023 ; 2560: 4095.
      * Enable one or more options to show the log
      */
-    //#define LOG_PERMANENT 1023
+    //#define LOG_PERMANENT
     //#define LOG_PERMANENT_SHOW_AT_STARTUP // enable to display log at startup
     //#define LOG_PERMANENT_SHOW_AT_L // enable to display log when receiving 'L'
     //#define LOG_PERMANENT_SHOW_AFTER_CONFIG // enable to display log after exiting LCD config menu
@@ -1031,8 +1169,18 @@
        value must be [1; 65535] */
     #define LCD_TELEMETRY_FREQ 23       // to send telemetry data over serial 23 <=> 60ms <=> 16Hz (only sending interlaced, so 8Hz update rate)
     #define LCD_TELEMETRY_AUTO_FREQ 967 // to step to next telemetry page 967 <=> 3s
-    #define PSENSORFREQ 6               // to read hardware powermeter sensor 6 <=> 18ms
-    #define VBATFREQ PSENSORFREQ        // to read battery voltage - keep equal to PSENSORFREQ unless you know what you are doing
+    #define PSENSOR_SMOOTH 8           // len of averaging vector for smoothing the PSENSOR readings; should be power of 2; set to 1 to disable
+    #define VBAT_SMOOTH 8              // len of averaging vector for smoothing the VBAT readings; should be power of 2; set to 1 to disable
+    #define RSSI_SMOOTH 32              // len of averaging vector for smoothing the RSSI readings; should be power of 2; set to 1 to disable
+
+  /********************************************************************/
+  /****           Dynamic Motor/Prop Balancing                     ****/
+  /********************************************************************/
+  /*                   !!! No Fly Mode !!! 
+        Copter is Only possible to controll from GUI Not With RC
+        All sensordata is disabled in Mixtable.*/ 
+		
+    //#define DYNBALANCE   // (**) Dynamic balancing controlled from Gui
 
   /********************************************************************/
   /****           Regression testing                               ****/

@@ -3,13 +3,13 @@
 // ************************************************************************************************************
 //default board orientation
 #if !defined(ACC_ORIENTATION) 
-  #define ACC_ORIENTATION(X, Y, Z)  {accADC[ROLL]  = X; accADC[PITCH]  = Y; accADC[YAW]  = Z;}
+  #define ACC_ORIENTATION(X, Y, Z)  {imu.accADC[ROLL]  = X; imu.accADC[PITCH]  = Y; imu.accADC[YAW]  = Z;}
 #endif
 #if !defined(GYRO_ORIENTATION) 
-  #define GYRO_ORIENTATION(X, Y, Z) {gyroADC[ROLL] = X; gyroADC[PITCH] = Y; gyroADC[YAW] = Z;}
+  #define GYRO_ORIENTATION(X, Y, Z) {imu.gyroADC[ROLL] = X; imu.gyroADC[PITCH] = Y; imu.gyroADC[YAW] = Z;}
 #endif
 #if !defined(MAG_ORIENTATION) 
-  #define MAG_ORIENTATION(X, Y, Z)  {magADC[ROLL]  = X; magADC[PITCH]  = Y; magADC[YAW]  = Z;}
+  #define MAG_ORIENTATION(X, Y, Z)  {imu.magADC[ROLL]  = X; imu.magADC[PITCH]  = Y; imu.magADC[YAW]  = Z;}
 #endif
 
 /*** I2C address ***/
@@ -283,17 +283,17 @@ void GYRO_Common() {
         g[axis]=0;
         
         #if defined(GYROCALIBRATIONFAILSAFE)
-            previousGyroADC[axis] = gyroADC[axis];
+            previousGyroADC[axis] = imu.gyroADC[axis];
           }
           if (calibratingG % 10 == 0) {
-            if(abs(gyroADC[axis] - previousGyroADC[axis]) > 8) tilt=1;
-            previousGyroADC[axis] = gyroADC[axis];
+            if(abs(imu.gyroADC[axis] - previousGyroADC[axis]) > 8) tilt=1;
+            previousGyroADC[axis] = imu.gyroADC[axis];
        #endif
       }
       // Sum up 512 readings
-      g[axis] +=gyroADC[axis];
+      g[axis] +=imu.gyroADC[axis];
       // Clear global variables for next reading
-      gyroADC[axis]=0;
+      imu.gyroADC[axis]=0;
       gyroZero[axis]=0;
       if (calibratingG == 1) {
         gyroZero[axis]=g[axis]>>9;
@@ -322,30 +322,30 @@ void GYRO_Common() {
 #ifdef MMGYRO       
   mediaMobileGyroIDX = ++mediaMobileGyroIDX % conf.mmgyro;
   for (axis = 0; axis < 3; axis++) {
-    gyroADC[axis]  -= gyroZero[axis];
+    imu.gyroADC[axis]  -= gyroZero[axis];
     mediaMobileGyroADCSum[axis] -= mediaMobileGyroADC[axis][mediaMobileGyroIDX];
     //anti gyro glitch, limit the variation between two consecutive readings
-    mediaMobileGyroADC[axis][mediaMobileGyroIDX] = constrain(gyroADC[axis],previousGyroADC[axis]-800,previousGyroADC[axis]+800);
+    mediaMobileGyroADC[axis][mediaMobileGyroIDX] = constrain(imu.gyroADC[axis],previousGyroADC[axis]-800,previousGyroADC[axis]+800);
     mediaMobileGyroADCSum[axis] += mediaMobileGyroADC[axis][mediaMobileGyroIDX];
-    gyroADC[axis] = mediaMobileGyroADCSum[axis] / conf.mmgyro;
+    imu.gyroADC[axis] = mediaMobileGyroADCSum[axis] / conf.mmgyro;
 #else 
   for (axis = 0; axis < 3; axis++) {
-    gyroADC[axis]  -= gyroZero[axis];
+    imu.gyroADC[axis]  -= gyroZero[axis];
     //anti gyro glitch, limit the variation between two consecutive readings
-    gyroADC[axis] = constrain(gyroADC[axis],previousGyroADC[axis]-800,previousGyroADC[axis]+800);
+    imu.gyroADC[axis] = constrain(imu.gyroADC[axis],previousGyroADC[axis]-800,previousGyroADC[axis]+800);
 #endif    
-    previousGyroADC[axis] = gyroADC[axis];
+    previousGyroADC[axis] = imu.gyroADC[axis];
   }
 
   #if defined(SENSORS_TILT_45DEG_LEFT)
-    int16_t temp  = ((gyroADC[PITCH] - gyroADC[ROLL] )*7)/10;
-    gyroADC[ROLL] = ((gyroADC[ROLL]  + gyroADC[PITCH])*7)/10;
-    gyroADC[PITCH]= temp;
+    int16_t temp  = ((imu.gyroADC[PITCH] - imu.gyroADC[ROLL] )*7)/10;
+    imu.gyroADC[ROLL] = ((imu.gyroADC[ROLL]  + imu.gyroADC[PITCH])*7)/10;
+    imu.gyroADC[PITCH]= temp;
   #endif
   #if defined(SENSORS_TILT_45DEG_RIGHT)
-    int16_t temp  = ((gyroADC[PITCH] + gyroADC[ROLL] )*7)/10;
-    gyroADC[ROLL] = ((gyroADC[ROLL]  - gyroADC[PITCH])*7)/10;
-    gyroADC[PITCH]= temp;
+    int16_t temp  = ((imu.gyroADC[PITCH] + imu.gyroADC[ROLL] )*7)/10;
+    imu.gyroADC[ROLL] = ((imu.gyroADC[ROLL]  - imu.gyroADC[PITCH])*7)/10;
+    imu.gyroADC[PITCH]= temp;
   #endif
 }
 
@@ -360,16 +360,16 @@ void ACC_Common() {
       // Reset a[axis] at start of calibration
       if (calibratingA == 512) a[axis]=0;
       // Sum up 512 readings
-      a[axis] +=accADC[axis];
+      a[axis] +=imu.accADC[axis];
       // Clear global variables for next reading
-      accADC[axis]=0;
+      imu.accADC[axis]=0;
       global_conf.accZero[axis]=0;
     }
-    // Calculate average, shift Z down by acc_1G and store values in EEPROM at end of calibration
+    // Calculate average, shift Z down by ACC_1G and store values in EEPROM at end of calibration
     if (calibratingA == 1) {
       global_conf.accZero[ROLL]  = a[ROLL]>>9;
       global_conf.accZero[PITCH] = a[PITCH]>>9;
-      global_conf.accZero[YAW]   = (a[YAW]>>9)-acc_1G; // for nunchuk 200=1G
+      global_conf.accZero[YAW]   = (a[YAW]>>9)-ACC_1G; // for nunchuk 200=1G
       conf.angleTrim[ROLL]   = 0;
       conf.angleTrim[PITCH]  = 0;
       writeGlobalSet(1); // write accZero in EEPROM
@@ -393,9 +393,9 @@ void ACC_Common() {
           // Reset a[axis] at start of calibration
           if (InflightcalibratingA == 50) b[axis]=0;
           // Sum up 50 readings
-          b[axis] +=accADC[axis];
+          b[axis] +=imu.accADC[axis];
           // Clear global variables for next reading
-          accADC[axis]=0;
+          imu.accADC[axis]=0;
           global_conf.accZero[axis]=0;
         }
         //all values are measured
@@ -414,30 +414,30 @@ void ACC_Common() {
         }
         InflightcalibratingA--;
       }
-      // Calculate average, shift Z down by acc_1G and store values in EEPROM at end of calibration
+      // Calculate average, shift Z down by ACC_1G and store values in EEPROM at end of calibration
       if (AccInflightCalibrationSavetoEEProm == 1){  //the copter is landed, disarmed and the combo has been done again
         AccInflightCalibrationSavetoEEProm = 0;
         global_conf.accZero[ROLL]  = b[ROLL]/50;
         global_conf.accZero[PITCH] = b[PITCH]/50;
-        global_conf.accZero[YAW]   = b[YAW]/50-acc_1G; // for nunchuk 200=1G
+        global_conf.accZero[YAW]   = b[YAW]/50-ACC_1G; // for nunchuk 200=1G
         conf.angleTrim[ROLL]   = 0;
         conf.angleTrim[PITCH]  = 0;
         writeGlobalSet(1); // write accZero in EEPROM
       }
   #endif
-  accADC[ROLL]  -=  global_conf.accZero[ROLL] ;
-  accADC[PITCH] -=  global_conf.accZero[PITCH];
-  accADC[YAW]   -=  global_conf.accZero[YAW] ;
+  imu.accADC[ROLL]  -=  global_conf.accZero[ROLL] ;
+  imu.accADC[PITCH] -=  global_conf.accZero[PITCH];
+  imu.accADC[YAW]   -=  global_conf.accZero[YAW] ;
 
   #if defined(SENSORS_TILT_45DEG_LEFT)
-    int16_t temp = ((accADC[PITCH] - accADC[ROLL] )*7)/10;
-    accADC[ROLL] = ((accADC[ROLL]  + accADC[PITCH])*7)/10;
-    accADC[PITCH] = temp;
+    int16_t temp = ((imu.accADC[PITCH] - imu.accADC[ROLL] )*7)/10;
+    imu.accADC[ROLL] = ((imu.accADC[ROLL]  + imu.accADC[PITCH])*7)/10;
+    imu.accADC[PITCH] = temp;
   #endif
   #if defined(SENSORS_TILT_45DEG_RIGHT)
-    int16_t temp = ((accADC[PITCH] + accADC[ROLL] )*7)/10;
-    accADC[ROLL] = ((accADC[ROLL]  - accADC[PITCH])*7)/10;
-    accADC[PITCH] = temp;
+    int16_t temp = ((imu.accADC[PITCH] + imu.accADC[ROLL] )*7)/10;
+    imu.accADC[ROLL] = ((imu.accADC[ROLL]  - imu.accADC[PITCH])*7)/10;
+    imu.accADC[PITCH] = temp;
   #endif
 }
 
@@ -717,7 +717,7 @@ uint8_t Baro_update() {                            // first UT conversion is sta
     static int32_t baroHistTab[BARO_TAB_SIZE];
     static uint8_t baroHistIdx;
   
-    uint8_t indexplus1 = (baroHistIdx + 1))%BARO_TAB_SIZE;
+    uint8_t indexplus1 = (baroHistIdx + 1);
     if (indexplus1 == BARO_TAB_SIZE) indexplus1 = 0;
     baroHistTab[baroHistIdx] = baroPressure;
     baroPressureSum += baroHistTab[baroHistIdx];
@@ -734,7 +734,6 @@ uint8_t Baro_update() {                            // first UT conversion is sta
 void ACC_init () {
   delay(10);
   i2c_writeReg(MMA7455_ADDRESS,0x16,0x21);
-  acc_1G = 64;
 }
 
 void ACC_getADC () {
@@ -763,7 +762,6 @@ void ACC_init () {
   i2c_writeReg(MMA8451Q_ADDRESS,0x2A,0x05); // wake up & low noise
   delay(10);
   i2c_writeReg(MMA8451Q_ADDRESS,0x0E,0x02); // full scale range
-  acc_1G = 512; // should be 1024 but 512 is knowen
 }
 
 void ACC_getADC () {
@@ -794,7 +792,6 @@ void ACC_init () {
   i2c_writeReg(ADXL345_ADDRESS,0x2D,1<<3); //  register: Power CTRL  -- value: Set measure bit 3 on
   i2c_writeReg(ADXL345_ADDRESS,0x31,0x0B); //  register: DATA_FORMAT -- value: Set bits 3(full range) and 1 0 on (+/- 16g-range)
   i2c_writeReg(ADXL345_ADDRESS,0x2C,0x09); //  register: BW_RATE     -- value: rate=50hz, bw=20hz
-  acc_1G = 265;
 }
 
 void ACC_getADC () {
@@ -846,7 +843,6 @@ void ACC_init () {
   control = control | (0x05 << 1); // set range to 8G
   i2c_writeReg(BMA180_ADDRESS, 0x35, control);
   delay(5); 
-  acc_1G = 255;
 }
 
 void ACC_getADC () {
@@ -884,7 +880,6 @@ void ACC_init(){
   control = control | (0x02 << 3); // Range 8G (10)
   control = control | 0x00;        // Bandwidth 25 Hz 000
   i2c_writeReg(0x38,0x14,control); 
-  acc_1G = 63;
 }
 
 void ACC_getADC(){
@@ -907,7 +902,6 @@ void ACC_init() {
   i2c_writeReg(NUNCHACK_ADDRESS ,0xF0 ,0x55 );
   i2c_writeReg(NUNCHACK_ADDRESS ,0xFB ,0x00 );
   delay(250);
-  acc_1G = 200;
 }
 
 void ACC_getADC() {
@@ -930,7 +924,6 @@ void ACC_getADC() {
 void ACC_init(){
   i2c_writeReg(LIS3A ,0x20 ,0xD7 ); // CTRL_REG1   1101 0111 Pwr on, 160Hz 
   i2c_writeReg(LIS3A ,0x21 ,0x50 ); // CTRL_REG2   0100 0000 Littl endian, 12 Bit, Boot
-  acc_1G = 256;
 }
 
 void ACC_getADC(){
@@ -952,8 +945,6 @@ void ACC_init () {
   i2c_writeReg(0x18,0x20,0x27);
   i2c_writeReg(0x18,0x23,0x30);
   i2c_writeReg(0x18,0x21,0x00);
-
-  acc_1G = 256;
 }
 
   void ACC_getADC () {
@@ -975,7 +966,6 @@ void ACC_init(){
   pinMode(A1,INPUT);
   pinMode(A2,INPUT);
   pinMode(A3,INPUT);
-  acc_1G = 75;
 }
 
 void ACC_getADC() {
@@ -1060,30 +1050,30 @@ uint8_t Mag_getADC() { // return 1 when news values are available, 0 otherwise
   t = currentTime + 100000;
   TWBR = ((F_CPU / 400000L) - 16) / 2; // change the I2C clock rate to 400kHz
   Device_Mag_getADC();
-  magADC[ROLL]  = magADC[ROLL]  * magGain[ROLL];
-  magADC[PITCH] = magADC[PITCH] * magGain[PITCH];
-  magADC[YAW]   = magADC[YAW]   * magGain[YAW];
+  imu.magADC[ROLL]  = imu.magADC[ROLL]  * magGain[ROLL];
+  imu.magADC[PITCH] = imu.magADC[PITCH] * magGain[PITCH];
+  imu.magADC[YAW]   = imu.magADC[YAW]   * magGain[YAW];
   if (f.CALIBRATE_MAG) {
     tCal = t;
     for(axis=0;axis<3;axis++) {
       global_conf.magZero[axis] = 0;
-      magZeroTempMin[axis] = magADC[axis];
-      magZeroTempMax[axis] = magADC[axis];
+      magZeroTempMin[axis] = imu.magADC[axis];
+      magZeroTempMax[axis] = imu.magADC[axis];
     }
     f.CALIBRATE_MAG = 0;
   }
   if (magInit) { // we apply offset only once mag calibration is done
-    magADC[ROLL]  -= global_conf.magZero[ROLL];
-    magADC[PITCH] -= global_conf.magZero[PITCH];
-    magADC[YAW]   -= global_conf.magZero[YAW];
+    imu.magADC[ROLL]  -= global_conf.magZero[ROLL];
+    imu.magADC[PITCH] -= global_conf.magZero[PITCH];
+    imu.magADC[YAW]   -= global_conf.magZero[YAW];
   }
  
   if (tCal != 0) {
     if ((t - tCal) < 30000000) { // 30s: you have 30s to turn the multi in all directions
       LEDPIN_TOGGLE;
       for(axis=0;axis<3;axis++) {
-        if (magADC[axis] < magZeroTempMin[axis]) magZeroTempMin[axis] = magADC[axis];
-        if (magADC[axis] > magZeroTempMax[axis]) magZeroTempMax[axis] = magADC[axis];
+        if (imu.magADC[axis] < magZeroTempMin[axis]) magZeroTempMin[axis] = imu.magADC[axis];
+        if (imu.magADC[axis] > magZeroTempMax[axis]) magZeroTempMax[axis] = imu.magADC[axis];
       }
     } else {
       tCal = 0;
@@ -1093,14 +1083,14 @@ uint8_t Mag_getADC() { // return 1 when news values are available, 0 otherwise
     }
   } else {
     #if defined(SENSORS_TILT_45DEG_LEFT)
-      int16_t temp = ((magADC[PITCH] - magADC[ROLL] )*7)/10;
-      magADC[ROLL] = ((magADC[ROLL]  + magADC[PITCH])*7)/10;
-      magADC[PITCH] = temp;
+      int16_t temp = ((imu.magADC[PITCH] - imu.magADC[ROLL] )*7)/10;
+      magADC[ROLL] = ((imu.magADC[ROLL]  + imu.magADC[PITCH])*7)/10;
+      imu.magADC[PITCH] = temp;
     #endif
     #if defined(SENSORS_TILT_45DEG_RIGHT)
-      int16_t temp = ((magADC[PITCH] + magADC[ROLL] )*7)/10;
-      magADC[ROLL] = ((magADC[ROLL]  - magADC[PITCH])*7)/10;
-      magADC[PITCH] = temp;
+      int16_t temp = ((imu.magADC[PITCH] + imu.magADC[ROLL] )*7)/10;
+      imu.magADC[ROLL] = ((imu.magADC[ROLL]  - imu.magADC[PITCH])*7)/10;
+      imu.magADC[PITCH] = temp;
     #endif
   }
   return 1;
@@ -1179,12 +1169,12 @@ void Mag_init() {
     getADC();   // Get the raw values in case the scales have already been changed.
                 
     // Since the measurements are noisy, they should be averaged rather than taking the max.
-    xyz_total[0]+=magADC[0];
-    xyz_total[1]+=magADC[1];
-    xyz_total[2]+=magADC[2];
+    xyz_total[0]+=imu.magADC[0];
+    xyz_total[1]+=imu.magADC[1];
+    xyz_total[2]+=imu.magADC[2];
                 
     // Detect saturation.
-    if (-(1<<12) >= min(magADC[0],min(magADC[1],magADC[2]))) {
+    if (-(1<<12) >= min(imu.magADC[0],min(imu.magADC[1],imu.magADC[2]))) {
       bret=false;
       break;  // Breaks out of the for loop.  No sense in continuing if we saturated.
     }
@@ -1198,12 +1188,12 @@ void Mag_init() {
     getADC();  // Get the raw values in case the scales have already been changed.
                 
     // Since the measurements are noisy, they should be averaged.
-    xyz_total[0]-=magADC[0];
-    xyz_total[1]-=magADC[1];
-    xyz_total[2]-=magADC[2];
+    xyz_total[0]-=imu.magADC[0];
+    xyz_total[1]-=imu.magADC[1];
+    xyz_total[2]-=imu.magADC[2];
 
     // Detect saturation.
-    if (-(1<<12) >= min(magADC[0],min(magADC[1],magADC[2]))) {
+    if (-(1<<12) >= min(imu.magADC[0],min(imu.magADC[1],imu.magADC[2]))) {
       bret=false;
       break;  // Breaks out of the for loop.  No sense in continuing if we saturated.
     }
@@ -1253,9 +1243,9 @@ void Mag_init() {
     delay(100);
       getADC();
     delay(10);
-      magGain[ROLL]  =  1000.0 / abs(magADC[ROLL]);
-      magGain[PITCH] =  1000.0 / abs(magADC[PITCH]);
-      magGain[YAW]   =  1000.0 / abs(magADC[YAW]);
+      magGain[ROLL]  =  1000.0 / abs(imu.magADC[ROLL]);
+      magGain[PITCH] =  1000.0 / abs(imu.magADC[PITCH]);
+      magGain[YAW]   =  1000.0 / abs(imu.magADC[YAW]);
 
     // leave test mode
     i2c_writeReg(MAG_ADDRESS ,0x00 ,0x70 ); //Configuration Register A  -- 0 11 100 00  num samples: 8 ; output rate: 15Hz ; normal measurement mode
@@ -1345,11 +1335,6 @@ void ACC_init () {
   i2c_writeReg(MPU6050_ADDRESS, 0x1C, 0x10);             //ACCEL_CONFIG  -- AFS_SEL=2 (Full Scale = +/-8G)  ; ACCELL_HPF=0   //note something is wrong in the spec.
   //note: something seems to be wrong in the spec here. With AFS=2 1G = 4096 but according to my measurement: 1G=2048 (and 2048/8 = 256)
   //confirmed here: http://www.multiwii.com/forum/viewtopic.php?f=8&t=1080&start=10#p7480
-  #if defined(FREEIMUv04)
-    acc_1G = 255;
-  #else
-    acc_1G = 512;
-  #endif
 
   #if defined(MPU6050_I2C_AUX_MASTER)
     //at this stage, the MAG is configured via the original MAG init function in I2C bypass mode
@@ -1442,22 +1427,22 @@ void Gyro_getADC() {
   i2c_getSixRawADC(WMP_ADDRESS_2,0x00);
 
   if (micros() < (neutralizeTime + NEUTRALIZE_DELAY)) {//we neutralize data in case of blocking+hard reset state
-    for (axis = 0; axis < 3; axis++) {gyroADC[axis]=0;accADC[axis]=0;}
-    accADC[YAW] = acc_1G;
+    for (axis = 0; axis < 3; axis++) {imu.gyroADC[axis]=0;imu.accADC[axis]=0;}
+    imu.accADC[YAW] = ACC_1G;
     f.NUNCHUKDATA = 0;
   } 
 
   // Wii Motion Plus Data
   if ( (rawADC[5]&0x03) == 0x02 ) {
     // Assemble 14bit data 
-    gyroADC[ROLL]  = - ( ((rawADC[5]>>2)<<8) | rawADC[2] ); //range: +/- 8192
-    gyroADC[PITCH] = - ( ((rawADC[4]>>2)<<8) | rawADC[1] );
-    gyroADC[YAW]  =  - ( ((rawADC[3]>>2)<<8) | rawADC[0] );
+    imu.gyroADC[ROLL]  = - ( ((rawADC[5]>>2)<<8) | rawADC[2] ); //range: +/- 8192
+    imu.gyroADC[PITCH] = - ( ((rawADC[4]>>2)<<8) | rawADC[1] );
+    imu.gyroADC[YAW]  =  - ( ((rawADC[3]>>2)<<8) | rawADC[0] );
     GYRO_Common();
     // Check if slow bit is set and normalize to fast mode range
-    gyroADC[ROLL]  = (rawADC[3]&0x01)     ? gyroADC[ROLL]/5  : gyroADC[ROLL];  //the ratio 1/5 is not exactly the IDG600 or ISZ650 specification 
-    gyroADC[PITCH] = (rawADC[4]&0x02)>>1  ? gyroADC[PITCH]/5 : gyroADC[PITCH]; //we detect here the slow of fast mode WMP gyros values (see wiibrew for more details)
-    gyroADC[YAW]   = (rawADC[3]&0x02)>>1  ? gyroADC[YAW]/5   : gyroADC[YAW];   // this step must be done after zero compensation    
+    imu.gyroADC[ROLL]  = (rawADC[3]&0x01)     ? imu.gyroADC[ROLL]/5  : imu.gyroADC[ROLL];  //the ratio 1/5 is not exactly the IDG600 or ISZ650 specification 
+    imu.gyroADC[PITCH] = (rawADC[4]&0x02)>>1  ? imu.gyroADC[PITCH]/5 : imu.gyroADC[PITCH]; //we detect here the slow of fast mode WMP gyros values (see wiibrew for more details)
+    imu.gyroADC[YAW]   = (rawADC[3]&0x02)>>1  ? imu.gyroADC[YAW]/5   : imu.gyroADC[YAW];   // this step must be done after zero compensation    
     f.NUNCHUKDATA = 0;
   #if defined(NUNCHUCK)
     } else if ( (rawADC[5]&0x03) == 0x00 ) { // Nunchuk Data
@@ -1472,9 +1457,8 @@ void Gyro_getADC() {
 
 #if defined(NUNCHUCK)
   void ACC_init () {
-    // We need to set acc_1G for the Nunchuk beforehand
+    // We need to set ACC_1G for the Nunchuk beforehand -> moved in def.h
     // If a different accelerometer is used, it will be overwritten by its ACC_init() later.
-    acc_1G = 200;
   }
   void ACC_getADC () { // it's done ine the WMP gyro part
     Gyro_getADC();
@@ -1715,7 +1699,7 @@ void initSensors() {
   if (GYRO) Gyro_init();
   if (BARO) Baro_init();
   if (MAG) Mag_init();
-  if (ACC) {ACC_init();acc_25deg = acc_1G * 0.423;}
+  if (ACC) ACC_init();
   if (SONAR) Sonar_init();
   f.I2C_INIT_DONE = 1;
 }

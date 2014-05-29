@@ -15,7 +15,7 @@ void readGlobalSet() {
   }
 }
  
-void readEEPROM() {
+bool readEEPROM() {
   uint8_t i;
   #ifdef MULTIPLE_CONFIGURATION_PROFILES
     if(global_conf.currentSet>2) global_conf.currentSet=0;
@@ -29,7 +29,9 @@ void readEEPROM() {
       alarmArray[7] = 3;
     #endif
     LoadDefaults();                 // force load defaults 
+    return false;                   // defaults loaded, don't reload constants (EEPROM life saving)
   }
+  
   for(i=0;i<6;i++) {
     lookupPitchRollRC[i] = (2500+conf.rcExpo8*(i*i-25))*i*(int32_t)conf.rcRate8/2500;
   }
@@ -39,7 +41,7 @@ void readEEPROM() {
     if (tmp>0) y = 100-conf.thrMid8;
     if (tmp<0) y = conf.thrMid8;
     lookupThrottleRC[i] = 10*conf.thrMid8 + tmp*( 100-conf.thrExpo8+(int32_t)conf.thrExpo8*(tmp*tmp)/(y*y) )/10; // [0;1000]
-    lookupThrottleRC[i] = conf.minthrottle + (int32_t)(MAXTHROTTLE-conf.minthrottle)* lookupThrottleRC[i]/1000;            // [0;1000] -> [conf.minthrottle;MAXTHROTTLE]
+    lookupThrottleRC[i] = conf.minthrottle + (int32_t)(MAXTHROTTLE-conf.minthrottle)* lookupThrottleRC[i]/1000;  // [0;1000] -> [conf.minthrottle;MAXTHROTTLE]
   }
 
   #if defined(POWERMETER)
@@ -62,7 +64,7 @@ void readEEPROM() {
     #endif
   #endif
   #if GPS
-    if (f.I2C_INIT_DONE) GPS_set_pids();
+    if (f.I2C_INIT_DONE) GPS_set_pids();    // at this time we don't have info about GPS init done
   #endif
   #ifdef POWERMETER_HARD
     conf.pleveldivsoft = PLEVELDIVSOFT;
@@ -73,6 +75,7 @@ void readEEPROM() {
   #if defined(ARMEDTIMEWARNING)
     ArmedTimeWarningMicroSeconds = (conf.armedtimewarning *1000000);
   #endif
+  return true;    // setting is OK
 }
 
 void writeGlobalSet(uint8_t b) {
@@ -101,28 +104,45 @@ void writeParams(uint8_t b) {
 }
 
 void LoadDefaults() {
-  conf.P8[ROLL]     = 40;  conf.I8[ROLL]    = 30; conf.D8[ROLL]     = 23;
-  conf.P8[PITCH]    = 40; conf.I8[PITCH]    = 30; conf.D8[PITCH]    = 23;
-  conf.P8[YAW]      = 85;  conf.I8[YAW]     = 45;  conf.D8[YAW]     = 0;
-  conf.P8[PIDALT]   = 50; conf.I8[PIDALT]   = 20; conf.D8[PIDALT]   = 30;
-  
-  conf.P8[PIDPOS]  = POSHOLD_P * 100;     conf.I8[PIDPOS]    = POSHOLD_I * 100;       conf.D8[PIDPOS]    = 0;
-  conf.P8[PIDPOSR] = POSHOLD_RATE_P * 10; conf.I8[PIDPOSR]   = POSHOLD_RATE_I * 100;  conf.D8[PIDPOSR]   = POSHOLD_RATE_D * 1000;
-  conf.P8[PIDNAVR] = NAV_P * 10;          conf.I8[PIDNAVR]   = NAV_I * 100;           conf.D8[PIDNAVR]   = NAV_D * 1000;
+  uint8_t i;
+  #ifndef SUPPRESS_DEFAULTS_FROM_GUI
+    conf.pid[ROLL].P8     = 40;  conf.pid[ROLL].I8    = 30; conf.pid[ROLL].D8     = 23;
+    conf.pid[PITCH].P8    = 40; conf.pid[PITCH].I8    = 30; conf.pid[PITCH].D8    = 23;
+    conf.pid[YAW].P8      = 85;  conf.pid[YAW].I8     = 45;  conf.pid[YAW].D8     = 0;
+    conf.pid[PIDALT].P8   = 50; conf.pid[PIDALT].I8   = 25; conf.pid[PIDALT].D8   = 30;
 
-  conf.P8[PIDLEVEL] = 70; conf.I8[PIDLEVEL] = 10; conf.D8[PIDLEVEL] = 100;
-  conf.P8[PIDMAG]   = 40;
+
+    conf.pid[PIDPOS].P8  = POSHOLD_P * 100;     conf.pid[PIDPOS].I8    = POSHOLD_I * 100;       conf.pid[PIDPOS].D8    = 0;
+    conf.pid[PIDPOSR].P8 = POSHOLD_RATE_P * 10; conf.pid[PIDPOSR].I8   = POSHOLD_RATE_I * 100;  conf.pid[PIDPOSR].D8   = POSHOLD_RATE_D * 1000;
+    conf.pid[PIDNAVR].P8 = NAV_P * 10;          conf.pid[PIDNAVR].I8   = NAV_I * 100;           conf.pid[PIDNAVR].D8   = NAV_D * 1000;
   
-  conf.P8[PIDVEL] = 0;      conf.I8[PIDVEL] = 0;    conf.D8[PIDVEL] = 0;
-  
-  conf.rcRate8 = 90; conf.rcExpo8 = 65;
-  conf.rollPitchRate = 0;
-  conf.yawRate = 0;
-  conf.dynThrPID = 0;
-  conf.thrMid8 = 50; conf.thrExpo8 = 0;
-  for(uint8_t i=0;i<CHECKBOXITEMS;i++) {conf.activate[i] = 0;}
-  conf.angleTrim[0] = 0; conf.angleTrim[1] = 0;
-  conf.powerTrigger1 = 0;
+    conf.pid[PIDLEVEL].P8 = 70; conf.pid[PIDLEVEL].I8 = 10; conf.pid[PIDLEVEL].D8 = 100;
+    conf.pid[PIDMAG].P8   = 40;
+
+    conf.pid[PIDVEL].P8 = 0;      conf.pid[PIDVEL].I8 = 0;    conf.pid[PIDVEL].D8 = 0;
+
+    conf.rcRate8 = 90; conf.rcExpo8 = 65;
+    conf.rollPitchRate = 0;
+    conf.yawRate = 0;
+    conf.dynThrPID = 0;
+    conf.thrMid8 = 50; conf.thrExpo8 = 0;
+    for(i=0;i<CHECKBOXITEMS;i++) {conf.activate[i] = 0;}
+    conf.angleTrim[0] = 0; conf.angleTrim[1] = 0;
+    conf.powerTrigger1 = 0;
+  #endif
+  for(i=0;i<8;i++) {
+      conf.servoConf[i].min = 1020;
+      conf.servoConf[i].max = 2000;
+      conf.servoConf[i].middle = 1500;
+      conf.servoConf[i].rate = 100;
+  }
+  #ifdef FIXEDWING
+    conf.dynThrPID = 50;
+    conf.rcExpo8   =  0;
+  #endif
+  update_constants();
+}
+void update_constants() { 
   #ifdef FLYING_WING
     conf.wing_left_mid  = WING_LEFT_MID; 
     conf.wing_right_mid = WING_RIGHT_MID; 
@@ -154,16 +174,15 @@ void LoadDefaults() {
     conf.vbatlevel_warn1 = VBATLEVEL_WARN1;
     conf.vbatlevel_warn2 = VBATLEVEL_WARN2;
     conf.vbatlevel_crit = VBATLEVEL_CRIT;
-    conf.no_vbat = NO_VBAT;
+	conf.no_vbat = NO_VBAT;
   #endif
-  #ifdef POWERMETER
-    conf.psensornull = PSENSORNULL;
-    //conf.pleveldivsoft = PLEVELDIVSOFT; // not neccessary; this gets set in the eeprom read function
+  #ifdef POWERMETER    
+    conf.pleveldivsoft = PLEVELDIVSOFT;
     conf.pleveldiv = PLEVELDIV;
     conf.pint2ma = PINT2mA;
   #endif
-  #ifdef CYCLETIME_FIXATED
-    conf.cycletime_fixated = CYCLETIME_FIXATED;
+  #ifdef POWERMETER_HARD
+    conf.psensornull = PSENSORNULL;
   #endif
   #ifdef MMGYRO
     conf.mmgyro = MMGYRO;
@@ -172,6 +191,9 @@ void LoadDefaults() {
     conf.armedtimewarning = ARMEDTIMEWARNING;
   #endif
   conf.minthrottle = MINTHROTTLE;
+  #if defined(MAG)
+    conf.mag_decliniation = MAG_DECLINIATION;
+  #endif
   #ifdef GOVERNOR_P
     conf.governorP = GOVERNOR_P;
     conf.governorD = GOVERNOR_D;
@@ -182,7 +204,7 @@ void LoadDefaults() {
 
 #ifdef LOG_PERMANENT
 void readPLog() {
-  eeprom_read_block((void*)&plog, (void*)(LOG_PERMANENT - sizeof(plog)), sizeof(plog));
+  eeprom_read_block((void*)&plog, (void*)(E2END - 4 - sizeof(plog)), sizeof(plog));
   if(calculate_sum((uint8_t*)&plog, sizeof(plog)) != plog.checksum) {
     blinkLED(9,100,3);
     #if defined(BUZZER)
@@ -197,6 +219,6 @@ void readPLog() {
 }
 void writePLog() {
   plog.checksum = calculate_sum((uint8_t*)&plog, sizeof(plog));
-  eeprom_write_block((const void*)&plog, (void*)(LOG_PERMANENT - sizeof(plog)), sizeof(plog));
+  eeprom_write_block((const void*)&plog, (void*)(E2END - 4 - sizeof(plog)), sizeof(plog));
 }
 #endif

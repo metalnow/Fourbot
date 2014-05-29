@@ -125,11 +125,11 @@ LeadFilter yLeadFilter;      // Lat  GPS lag filter
   #define _Y 0
 
   #define RADX100                    0.000174532925  
-  #define CROSSTRACK_GAIN            1
+  #define CROSSTRACK_GAIN            2
   #define NAV_SPEED_MIN              100    // cm/sec
-  #define NAV_SPEED_MAX              300    // cm/sec
+  #define NAV_SPEED_MAX              350    // cm/sec
   #define NAV_SLOW_NAV               true
-  #define NAV_BANK_MAX 3000        //30deg max banking when navigating (just for security and testing)
+  #define NAV_BANK_MAX 3500        //30deg max banking when navigating (just for security and testing)
 
   static float  dTnav;            // Delta Time in milliseconds for navigation computations, updated with every good GPS read
   static uint16_t GPS_wp_radius    = GPS_WP_RADIUS;
@@ -415,6 +415,10 @@ void GPS_NewData() {
               }
             }
           } else {        //Home position reached
+            nav_mode = NAV_MODE_POSHOLD;
+            #if ((defined(RTH_ALT_MODE) || defined(WP_ALT_MODE)) && !defined(SUPPRESS_BARO_ALTHOLD)) || (defined(FAILSAFE) && (defined (FAILSAFE_ALT_MODE) || defined(FAILSAFE_RTH_MODE)))
+               targetAltReached = 0;                     // reset parameter when switch mode
+            #endif
             if (NAV_SET_TAKEOFF_HEADING) { magHold = nav_takeoff_bearing; }
           }
         }
@@ -484,7 +488,7 @@ void GPS_NewData() {
           //calculate distance and bearings for gui and other stuff continously - From home to copter
           uint32_t dist;
           int32_t  dir;
-          GPS_distance_cm_bearing(&GPS_coord[LAT],&GPS_coord[LON],&GPS_home[LAT],&GPS_home[LON],&dist,&dir);
+          GPS_distance_cm_bearing(&GPS_coord[LAT],&GPS_coord[LON],&WP[HOME].Lat,&WP[HOME].Lon,&dist,&dir);
           GPS_distanceToHome = dist/100;
           GPS_directionToHome = dir/100;
 
@@ -527,9 +531,12 @@ void GPS_NewData() {
                 // Are we there yet ?(within 2 meters of the destination)
                 if ((wp_distance <= GPS_wp_radius) || check_missed_wp()){         //if yes switch to poshold mode
                   nav_mode = NAV_MODE_POSHOLD;
-                  if (NAV_SET_TAKEOFF_HEADING) { magHold = nav_takeoff_bearing; }
+                  #if ((defined(RTH_ALT_MODE) || defined(WP_ALT_MODE)) && !defined(SUPPRESS_BARO_ALTHOLD)) || (defined(FAILSAFE) && defined(FAILSAFE_RTH_MODE))
+                    targetAltReached = 0;                     // reset parameter when switch mode
+                  #endif
+                  if (NAV_SET_TAKEOFF_HEADING) { magHold = WP[HOME].Heading; }
                 } 
-                break;               
+                break;
             }
           } //end of gps calcs  
         }
@@ -544,11 +551,11 @@ void GPS_reset_home_position() {
       //set current position as home
       GPS_I2C_command(I2C_GPS_COMMAND_SET_WP,0);  //WP0 is the home position
     #else
-      GPS_home[LAT] = GPS_coord[LAT];
-      GPS_home[LON] = GPS_coord[LON];
+      WP[HOME].Lat = GPS_coord[LAT];
+      WP[HOME].Lon = GPS_coord[LON];
       GPS_calc_longitude_scaling(GPS_coord[LAT]);  //need an initial value for distance and bearing calc
     #endif
-    nav_takeoff_bearing = heading;             //save takeoff heading
+    WP[HOME].Heading = att.heading;             //save takeoff heading
     //Set ground altitude
     f.GPS_FIX_HOME = 1;
   }
@@ -575,38 +582,38 @@ void GPS_reset_nav() {
 //Get the relevant P I D values and set the PID controllers 
 void GPS_set_pids() {
   #if defined(GPS_SERIAL)  || defined(GPS_FROM_OSD) || defined(TINY_GPS)
-    posholdPID_PARAM.kP   = (float)conf.P8[PIDPOS]/100.0;
-    posholdPID_PARAM.kI   = (float)conf.I8[PIDPOS]/100.0;
+    posholdPID_PARAM.kP   = (float)conf.pid[PIDPOS].P8/100.0;
+    posholdPID_PARAM.kI   = (float)conf.pid[PIDPOS].I8/100.0;
     posholdPID_PARAM.Imax = POSHOLD_RATE_IMAX * 100;
     
-    poshold_ratePID_PARAM.kP   = (float)conf.P8[PIDPOSR]/10.0;
-    poshold_ratePID_PARAM.kI   = (float)conf.I8[PIDPOSR]/100.0;
-    poshold_ratePID_PARAM.kD   = (float)conf.D8[PIDPOSR]/1000.0;
+    poshold_ratePID_PARAM.kP   = (float)conf.pid[PIDPOSR].P8/10.0;
+    poshold_ratePID_PARAM.kI   = (float)conf.pid[PIDPOSR].I8/100.0;
+    poshold_ratePID_PARAM.kD   = (float)conf.pid[PIDPOSR].D8/1000.0;
     poshold_ratePID_PARAM.Imax = POSHOLD_RATE_IMAX * 100;
     
-    navPID_PARAM.kP   = (float)conf.P8[PIDNAVR]/10.0;
-    navPID_PARAM.kI   = (float)conf.I8[PIDNAVR]/100.0;
-    navPID_PARAM.kD   = (float)conf.D8[PIDNAVR]/1000.0;
+    navPID_PARAM.kP   = (float)conf.pid[PIDNAVR].P8/10.0;
+    navPID_PARAM.kI   = (float)conf.pid[PIDNAVR].I8/100.0;
+    navPID_PARAM.kD   = (float)conf.pid[PIDNAVR].D8/1000.0;
     navPID_PARAM.Imax = POSHOLD_RATE_IMAX * 100;
   #endif
 
   #if defined(I2C_GPS)
     i2c_rep_start(I2C_GPS_ADDRESS<<1);
       i2c_write(I2C_GPS_HOLD_P);
-       i2c_write(conf.P8[PIDPOS]);
-       i2c_write(conf.I8[PIDPOS]);
+       i2c_write(conf.pid[PIDPOS].P8);
+       i2c_write(conf.pid[PIDPOS].P8);
     
     i2c_rep_start(I2C_GPS_ADDRESS<<1);
       i2c_write(I2C_GPS_HOLD_RATE_P);
-       i2c_write(conf.P8[PIDPOSR]);
-       i2c_write(conf.I8[PIDPOSR]);
-       i2c_write(conf.D8[PIDPOSR]);
+       i2c_write(conf.pid[PIDPOSR].P8);
+       i2c_write(conf.pid[PIDPOSR].I8);
+       i2c_write(conf.pid[PIDPOSR].D8);
     
     i2c_rep_start(I2C_GPS_ADDRESS<<1);
       i2c_write(I2C_GPS_NAV_P);
-       i2c_write(conf.P8[PIDNAVR]);
-       i2c_write(conf.I8[PIDNAVR]);
-       i2c_write(conf.D8[PIDNAVR]);
+       i2c_write(conf.pid[PIDNAVR].P8);
+       i2c_write(conf.pid[PIDNAVR].I8);
+       i2c_write(conf.pid[PIDNAVR].D8);
     
     GPS_I2C_command(I2C_GPS_COMMAND_UPDATE_PIDS,0);
     

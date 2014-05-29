@@ -28,8 +28,6 @@
   static uint8_t PCInt_RX_Pins[PCINT_PIN_COUNT] = {PCINT_RX_BITS}; // if this slowes the PCINT readings we can switch to a define for each pcint bit
 #endif
 
-#define FAILSAFE_DETECT_TRESHOLD  985
-
 /**************************************************************************************/
 /***************                   RX Pin Setup                    ********************/
 /**************************************************************************************/
@@ -92,6 +90,9 @@ void configureReceiver() {
   // Init SBUS RX
   #if defined(SBUS)
     SerialOpen(1,100000);
+  #endif
+  #if defined (RCSERIAL)
+    for (int chan = 0; chan < RC_CHANS; chan++) rcData[chan]=1502;
   #endif
 }
 
@@ -400,15 +401,15 @@ void computeRC() {
       readSBus();
     #endif
     rc4ValuesIndex++;
-    if (rc4ValuesIndex == 4) rc4ValuesIndex = 0;
+	rc4ValuesIndex = rc4ValuesIndex%4;
     for (chan = 0; chan < RC_CHANS; chan++) {
       #if defined(FAILSAFE)
         uint16_t rcval = readRawRC(chan);
-        if(rcval>FAILSAFE_DETECT_TRESHOLD || chan > 3) {        // update controls channel only if pulse is above FAILSAFE_DETECT_TRESHOLD
-          rcData4Values[chan][rc4ValuesIndex%4] = rcval;
+        if(rcval>FAILSAFE_DETECT_TRESHOLD || chan > 3 || !f.ARMED) {        // update controls channel only if pulse is above FAILSAFE_DETECT_TRESHOLD
+          rcData4Values[chan][rc4ValuesIndex] = rcval;                      // In disarmed state allow always update for easer configuration.
         }
       #else
-        rcData4Values[chan][rc4ValuesIndex%4] = readRawRC(chan);
+        rcData4Values[chan][rc4ValuesIndex] = readRawRC(chan);
       #endif
       rcDataMean[chan] = 0;
       for (a=0;a<4;a++) rcDataMean[chan] += rcData4Values[chan][a];
