@@ -28,6 +28,8 @@
   static uint8_t PCInt_RX_Pins[PCINT_PIN_COUNT] = {PCINT_RX_BITS}; // if this slowes the PCINT readings we can switch to a define for each pcint bit
 #endif
 
+#define FAILSAFE_DETECT_TRESHOLD  985
+
 /**************************************************************************************/
 /***************                   RX Pin Setup                    ********************/
 /**************************************************************************************/
@@ -90,9 +92,6 @@ void configureReceiver() {
   // Init SBUS RX
   #if defined(SBUS)
     SerialOpen(1,100000);
-  #endif
-  #if defined (RCSERIAL)
-    for (int chan = 0; chan < RC_CHANS; chan++) rcData[chan]=1502;
   #endif
 }
 
@@ -405,11 +404,11 @@ void computeRC() {
     for (chan = 0; chan < RC_CHANS; chan++) {
       #if defined(FAILSAFE)
         uint16_t rcval = readRawRC(chan);
-        if(rcval>FAILSAFE_DETECT_TRESHOLD || chan > 3 || !f.ARMED) {        // update controls channel only if pulse is above FAILSAFE_DETECT_TRESHOLD
-          rcData4Values[chan][rc4ValuesIndex] = rcval;                      // In disarmed state allow always update for easer configuration.
+        if(rcval>FAILSAFE_DETECT_TRESHOLD || chan > 3) {        // update controls channel only if pulse is above FAILSAFE_DETECT_TRESHOLD
+          rcData4Values[chan][rc4ValuesIndex%4] = rcval;
         }
       #else
-        rcData4Values[chan][rc4ValuesIndex] = readRawRC(chan);
+        rcData4Values[chan][rc4ValuesIndex%4] = readRawRC(chan);
       #endif
       rcDataMean[chan] = 0;
       for (a=0;a<4;a++) rcDataMean[chan] += rcData4Values[chan][a];
@@ -521,10 +520,8 @@ void Read_OpenLRS_RC() {
       rcData[YAW] = Servo_Buffer[3]; 
       rcData[AUX1] = Servo_Buffer[4]; 
       rcData[AUX2] = Servo_Buffer[5]; 
-      rcData[AUX3] = rcData[AUX1]; 
-      rcData[AUX4] = rcData[AUX2];  
-//      rcData[AUX3] = Servo_Buffer[6]; 
-//      rcData[AUX4] = Servo_Buffer[7];  
+      rcData[AUX3] = Servo_Buffer[6]; 
+      rcData[AUX4] = Servo_Buffer[7];  
     }
     #if (FREQUENCY_HOPPING==1)
       Hopping(); //Hop to the next frequency
@@ -799,12 +796,12 @@ void spekBind() {
   pinMode(SPEK_BIND_POWER,OUTPUT);
   
   while(1) {  //Do not return.  User presses reset button to return to normal. 
-    blinkLED(4,255,1);
+    blinkLED(4,300,1);
     digitalWrite(SPEK_BIND_POWER,LOW); // Power off sat
     pinMode(SPEK_BIND_DATA, OUTPUT); 
     digitalWrite(SPEK_BIND_DATA,LOW); 
     delay(1000); 
-    blinkLED(4,255,1);
+    blinkLED(4,300,1);
     
     digitalWrite(SPEK_BIND_POWER,HIGH); // Power on sat
     delay(10);

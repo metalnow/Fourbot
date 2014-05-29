@@ -119,86 +119,49 @@ void writeServos() {
         }
       #endif
     #endif
-    // write HW PWM servos for the mega
+    // write HW PWM gimbal servos for the mega (needs to be also implemented to the MMSERVOGIMBAL)
     #if defined(MEGA) && defined(MEGA_HW_PWM_SERVOS)
-      #if (PRI_SERVO_FROM == 1 || SEC_SERVO_FROM == 1) 
-        OCR5C = servo[0];
-      #endif 
-      #if (PRI_SERVO_FROM <= 2 && PRI_SERVO_TO >= 2) || (SEC_SERVO_FROM <= 2 && SEC_SERVO_TO >= 2) 
-        OCR5B = servo[1];
-      #endif 
-      #if (PRI_SERVO_FROM <= 3 && PRI_SERVO_TO >= 3) || (SEC_SERVO_FROM <= 3 && SEC_SERVO_TO >= 3) 
-        OCR5A = servo[2];
-      #endif 
-      #if (PRI_SERVO_FROM <= 4 && PRI_SERVO_TO >= 4) || (SEC_SERVO_FROM <= 4 && SEC_SERVO_TO >= 4) 
-        OCR1A = servo[3];
-      #endif 
-      #if (PRI_SERVO_FROM <= 5 && PRI_SERVO_TO >= 5) || (SEC_SERVO_FROM <= 5 && SEC_SERVO_TO >= 5) 
-        OCR1B = servo[4];
-      #endif 
-      #if (PRI_SERVO_FROM <= 6 && PRI_SERVO_TO >= 6) || (SEC_SERVO_FROM <= 6 && SEC_SERVO_TO >= 6) 
-        OCR4A = servo[5];
-      #endif 
-      #if (PRI_SERVO_FROM <= 7 && PRI_SERVO_TO >= 7) || (SEC_SERVO_FROM <= 7 && SEC_SERVO_TO >= 7) 
-        OCR4B = servo[6];
-      #endif 
-      #if (PRI_SERVO_FROM <= 8 && PRI_SERVO_TO >= 8) || (SEC_SERVO_FROM <= 8 && SEC_SERVO_TO >= 8) 
-        OCR4C = servo[7];
-      #endif
+      OCR5C = servo[0];
+      OCR5B = servo[1];
+      OCR5A = servo[2];
+      OCR1A = servo[3];
+      OCR1B = servo[4];
     #endif
   #endif
 }
-/**************************************************************************************/
-/************          Writes mincommand to selected Motors          ******************/
-/**************************************************************************************/
-#if defined(DYNBALANCE)
-  void ToggleMotorsForBalanceing(){
-    if (!(motorTogglesByte&1))   motor[0] = MINCOMMAND;
-    if (!(motorTogglesByte&2))   motor[1] = MINCOMMAND;
-    if (!(motorTogglesByte&4))   motor[2] = MINCOMMAND;
-    if (!(motorTogglesByte&8))   motor[3] = MINCOMMAND;
-    if (!(motorTogglesByte&16))  motor[4] = MINCOMMAND;
-    if (!(motorTogglesByte&32))  motor[5] = MINCOMMAND;
-    if (!(motorTogglesByte&64))  motor[6] = MINCOMMAND;
-    if (!(motorTogglesByte&128)) motor[7] = MINCOMMAND;
-  }
-#endif
 
 /**************************************************************************************/
 /************  Writes the Motors values to the PWM compare register  ******************/
 /**************************************************************************************/
 void writeMotors() { // [1000;2000] => [125;250]
-  #if defined(DYNBALANCE)
-    ToggleMotorsForBalanceing();
-  #endif
   /****************  Specific PWM Timers & Registers for the MEGA's   *******************/
   #if defined(MEGA)// [1000:2000] => [8000:16000] for timer 3 & 4 for mega
     #if (NUMBER_MOTOR > 0) 
       #ifndef EXT_MOTOR_RANGE 
         OCR3C = motor[0]<<3; //  pin 3
       #else
-        OCR3C = ((motor[0]<<4) - 16000);
+        OCR3C = ((motor[0]<<4) - 16000) + 128;
       #endif
     #endif
     #if (NUMBER_MOTOR > 1)
       #ifndef EXT_MOTOR_RANGE 
         OCR3A = motor[1]<<3; //  pin 5
       #else
-        OCR3A = ((motor[1]<<4) - 16000);
+        OCR3A = ((motor[1]<<4) - 16000) + 128;
       #endif
     #endif
     #if (NUMBER_MOTOR > 2)
       #ifndef EXT_MOTOR_RANGE 
         OCR4A = motor[2]<<3; //  pin 6
       #else
-        OCR4A = ((motor[2]<<4) - 16000);
+        OCR4A = ((motor[2]<<4) - 16000) + 128;
       #endif
     #endif
     #if (NUMBER_MOTOR > 3)
       #ifndef EXT_MOTOR_RANGE 
         OCR3B = motor[3]<<3; //  pin 2
       #else
-        OCR3B = ((motor[3]<<4) - 16000);
+        OCR3B = ((motor[3]<<4) - 16000) + 128;
       #endif
     #endif
     #if (NUMBER_MOTOR > 4)
@@ -206,8 +169,8 @@ void writeMotors() { // [1000;2000] => [125;250]
         OCR4B = motor[4]<<3; //  pin 7
         OCR4C = motor[5]<<3; //  pin 8
       #else
-        OCR4B = ((motor[4]<<4) - 16000);
-        OCR4C = ((motor[5]<<4) - 16000);
+        OCR4B = ((motor[4]<<4) - 16000) + 128;
+        OCR4C = ((motor[5]<<4) - 16000) + 128;
       #endif
     #endif
     #if (NUMBER_MOTOR > 6)
@@ -516,31 +479,29 @@ void initOutput() {
 /************                Initialize the PWM Servos               ******************/
 /**************************************************************************************/
 void initializeServo() {
-  #if !defined(MEGA) || !defined(MEGA_HW_PWM_SERVOS)    // no pins init with mega and HW PWM's there
-    #if (PRI_SERVO_FROM == 1) || (SEC_SERVO_FROM == 1)
-      SERVO_1_PINMODE;
-    #endif
-    #if (PRI_SERVO_FROM <= 2 && PRI_SERVO_TO >= 2) || (SEC_SERVO_FROM <= 2 && SEC_SERVO_TO >= 2) 
-      SERVO_2_PINMODE;
-    #endif
-    #if (PRI_SERVO_FROM <= 3 && PRI_SERVO_TO >= 3) || (SEC_SERVO_FROM <= 3 && SEC_SERVO_TO >= 3) 
-      SERVO_3_PINMODE;
-    #endif 
-    #if (PRI_SERVO_FROM <= 4 && PRI_SERVO_TO >= 4) || (SEC_SERVO_FROM <= 4 && SEC_SERVO_TO >= 4) 
-      SERVO_4_PINMODE;
-    #endif 
-    #if (PRI_SERVO_FROM <= 5 && PRI_SERVO_TO >= 5) || (SEC_SERVO_FROM <= 5 && SEC_SERVO_TO >= 5) 
-      SERVO_5_PINMODE;
-    #endif 
-    #if (PRI_SERVO_FROM <= 6 && PRI_SERVO_TO >= 6) || (SEC_SERVO_FROM <= 6 && SEC_SERVO_TO >= 6) 
-      SERVO_6_PINMODE;
-    #endif 
-    #if (PRI_SERVO_FROM <= 7 && PRI_SERVO_TO >= 7) || (SEC_SERVO_FROM <= 7 && SEC_SERVO_TO >= 7) 
-      SERVO_7_PINMODE;
-    #endif 
-    #if (PRI_SERVO_FROM <= 8 && PRI_SERVO_TO >= 8) || (SEC_SERVO_FROM <= 8 && SEC_SERVO_TO >= 8) 
-      SERVO_8_PINMODE;
-    #endif
+  #if (PRI_SERVO_FROM == 1) || (SEC_SERVO_FROM == 1)
+    SERVO_1_PINMODE;
+  #endif
+  #if (PRI_SERVO_FROM <= 2 && PRI_SERVO_TO >= 2) || (SEC_SERVO_FROM <= 2 && SEC_SERVO_TO >= 2) 
+    SERVO_2_PINMODE;
+  #endif
+  #if (PRI_SERVO_FROM <= 3 && PRI_SERVO_TO >= 3) || (SEC_SERVO_FROM <= 3 && SEC_SERVO_TO >= 3) 
+    SERVO_3_PINMODE;
+  #endif 
+  #if (PRI_SERVO_FROM <= 4 && PRI_SERVO_TO >= 4) || (SEC_SERVO_FROM <= 4 && SEC_SERVO_TO >= 4) 
+    SERVO_4_PINMODE;
+  #endif 
+  #if (PRI_SERVO_FROM <= 5 && PRI_SERVO_TO >= 5) || (SEC_SERVO_FROM <= 5 && SEC_SERVO_TO >= 5) 
+    SERVO_5_PINMODE;
+  #endif 
+  #if (PRI_SERVO_FROM <= 6 && PRI_SERVO_TO >= 6) || (SEC_SERVO_FROM <= 6 && SEC_SERVO_TO >= 6) 
+    SERVO_6_PINMODE;
+  #endif 
+  #if (PRI_SERVO_FROM <= 7 && PRI_SERVO_TO >= 7) || (SEC_SERVO_FROM <= 7 && SEC_SERVO_TO >= 7) 
+    SERVO_7_PINMODE;
+  #endif 
+  #if (PRI_SERVO_FROM <= 8 && PRI_SERVO_TO >= 8) || (SEC_SERVO_FROM <= 8 && SEC_SERVO_TO >= 8) 
+    SERVO_8_PINMODE;
   #endif
 
   #if defined(SERVO_1_HIGH)  
@@ -570,85 +531,39 @@ void initializeServo() {
       #define SERVO_1K_US 16000 
     #endif
   #endif
-
+  // init Timer 1 and 5 of the mega for hw PWM gimbal servos
   #if defined(MEGA) && defined(MEGA_HW_PWM_SERVOS)
-    #if defined(SERVO_RFR_RATE)
-      #if (SERVO_RFR_RATE < 20)
-        #define SERVO_RFR_RATE 20
-      #endif
-      #if (SERVO_RFR_RATE > 400)
-        #define SERVO_RFR_RATE 400
-      #endif
-    #else
-      #if defined(SERVO_RFR_50HZ)
-        #define SERVO_RFR_RATE 50
-      #elif defined(SERVO_RFR_160HZ)
-        #define SERVO_RFR_RATE 160
-      #elif defined(SERVO_RFR_300HZ)
-        #define SERVO_RFR_RATE 300
-      #endif
-    #endif  
-    #define SERVO_TOP_VAL (uint16_t)(1000000L / SERVO_RFR_RATE)
-    // init Timer 5, 1 and 4 of the mega for hw PWM
     TIMSK5 &= ~(1<<OCIE5A); // Disable software PWM  
-    #if (PRI_SERVO_TO >= 1) || (SEC_SERVO_TO >= 1)
-      TCCR5A |= (1<<WGM51);   // phase correct mode & prescaler to 8 = 1us resolution
-      TCCR5A &= ~(1<<WGM50);
-      TCCR5B &= ~(1<<WGM52) &  ~(1<<CS50) & ~(1<<CS52);
-      TCCR5B |= (1<<WGM53) | (1<<CS51);
-      ICR5 = SERVO_TOP_VAL;
-      #if (PRI_SERVO_FROM == 1 || SEC_SERVO_FROM == 1) 
-        pinMode(44,OUTPUT);
-        TCCR5A |= (1<<COM5C1); // pin 44
-      #endif
-      #if (PRI_SERVO_FROM <= 2 && PRI_SERVO_TO >= 2) || (SEC_SERVO_FROM <= 2 && SEC_SERVO_TO >= 2) 
-        pinMode(45,OUTPUT);
-        TCCR5A |= (1<<COM5B1); // pin 45
-      #endif
-      #if (PRI_SERVO_FROM <= 3 && PRI_SERVO_TO >= 3) || (SEC_SERVO_FROM <= 3 && SEC_SERVO_TO >= 3) 
-        pinMode(46,OUTPUT);
-        TCCR5A |= (1<<COM5A1); // pin 46
-      #endif
+    TCCR5A |= (1<<WGM51); // phase correct mode & prescaler to 8
+    TCCR5A &= ~(1<<WGM50);
+    TCCR5B &= ~(1<<WGM52) &  ~(1<<CS50) & ~(1<<CS52);
+    TCCR5B |= (1<<WGM53) | (1<<CS51);
+    pinMode(44,OUTPUT);
+    TCCR5A |= (1<<COM5C1); // pin 44
+    pinMode(45,OUTPUT);
+    TCCR5A |= (1<<COM5B1); // pin 45
+    pinMode(46,OUTPUT);
+    TCCR5A |= (1<<COM5A1); // pin 46
+    TCCR1A |= (1<<WGM11); // phase correct mode & prescaler to 8
+    TCCR1A &= ~(1<<WGM10);
+    TCCR1B &= ~(1<<WGM12) &  ~(1<<CS10) & ~(1<<CS12);
+    TCCR1B |= (1<<WGM13) | (1<<CS11);
+    pinMode(11,OUTPUT);
+    TCCR1A |= (1<<COM1A1); // pin 11
+    pinMode(12,OUTPUT);
+    TCCR1A |= (1<<COM1B1); // pin 12
+    #if defined(SERVO_RFR_50HZ) 
+      ICR1   = 16700; // TOP to 16700; 
+      ICR5   = 16700; // TOP to 16700; 
     #endif
-    #if (PRI_SERVO_TO >= 4) || (SEC_SERVO_TO >= 4) 
-      TCCR1A |= (1<<WGM11); // phase correct mode & prescaler to 8
-      TCCR1A &= ~(1<<WGM10);
-      TCCR1B &= ~(1<<WGM12) &  ~(1<<CS10) & ~(1<<CS12);
-      TCCR1B |= (1<<WGM13) | (1<<CS11);
-      ICR1 = SERVO_TOP_VAL;
-      #if (PRI_SERVO_FROM <= 4 && PRI_SERVO_TO >= 4) || (SEC_SERVO_FROM <= 4 && SEC_SERVO_TO >= 4) 
-        pinMode(11, OUTPUT);
-        TCCR1A |= (1<<COM1A1); // pin 11
-      #endif
-      #if (PRI_SERVO_FROM <= 5 && PRI_SERVO_TO >= 5) || (SEC_SERVO_FROM <= 5 && SEC_SERVO_TO >= 5) 
-        pinMode(12,OUTPUT);
-        TCCR1A |= (1<<COM1B1); // pin 12
-      #endif
+    #if defined(SERVO_RFR_160HZ) 
+      ICR1   = 6200; // TOP to 6200; 
+      ICR5   = 6200; // TOP to 6200; 
     #endif
-    #if (PRI_SERVO_TO >= 6) || (SEC_SERVO_TO >= 6) 
-      // init 16bit timer 4
-      TCCR4A |= (1<<WGM41); // phase correct mode
-      TCCR4A &= ~(1<<WGM40);
-      TCCR4B &= ~(1<<WGM42) &  ~(1<<CS40) & ~(1<<CS42);
-      TCCR4B |= (1<<WGM43) | (1<<CS41);
-      ICR4 = SERVO_TOP_VAL;
-      #if (PRI_SERVO_FROM <= 6 && PRI_SERVO_TO >= 6) || (SEC_SERVO_FROM <= 6 && SEC_SERVO_TO >= 6) 
-        pinMode(6,OUTPUT);
-        TCCR4A |= _BV(COM4A1); // connect pin 6 to timer 4 channel A
-      #endif
-      #if (PRI_SERVO_FROM <= 7 && PRI_SERVO_TO >= 7) || (SEC_SERVO_FROM <= 7 && SEC_SERVO_TO >= 7) 
-        pinMode(7,OUTPUT);
-        TCCR4A |= _BV(COM4B1); // connect pin 7 to timer 4 channel B
-      #endif
-      #if (PRI_SERVO_FROM <= 8 && PRI_SERVO_TO >= 8) || (SEC_SERVO_FROM <= 8 && SEC_SERVO_TO >= 8) 
-        #if defined(AIRPLANE) || defined(HELICOPTER)
-          servo[7] =  MINCOMMAND;    // Trhottle at minimum for airplane and heli
-          OCR4C = MINCOMMAND;
-        #endif  
-        pinMode(8,OUTPUT);
-        TCCR4A |= _BV(COM4C1); // connect pin 8 to timer 4 channel C
-      #endif
-    #endif 
+    #if defined(SERVO_RFR_300HZ) 
+      ICR1   = 3330; // TOP to 3330;  
+      ICR5   = 3330; // TOP to 3330;  
+    #endif
   #endif
 }
 
@@ -890,9 +805,7 @@ void initializeServo() {
 void mixTable() {
   int16_t maxMotor;
   uint8_t i;
-  #if defined(DYNBALANCE)
-    for(uint8_t axis=0;axis<3;axis++) {axisPID[axis] = 0;} // Zero PID's for DYNBALANCE
-  #endif
+
   #define PIDMIX(X,Y,Z) rcCommand[THROTTLE] + axisPID[ROLL]*X + axisPID[PITCH]*Y + YAW_DIRECTION * axisPID[YAW]*Z
 
   #if NUMBER_MOTOR > 3
@@ -913,7 +826,7 @@ void mixTable() {
       motor[0] = PIDMIX( 0,+4/3, 0); //REAR
       motor[1] = PIDMIX(-1,-2/3, 0); //RIGHT
       motor[2] = PIDMIX(+1,-2/3, 0); //LEFT
-      servo[TRI_SERVO-1] = constrain(conf.tri_yaw_middle + YAW_DIRECTION * axisPID[YAW], TRI_YAW_CONSTRAINT_MIN, TRI_YAW_CONSTRAINT_MAX); //REAR
+      servo[5] = constrain(conf.tri_yaw_middle + YAW_DIRECTION * axisPID[YAW], TRI_YAW_CONSTRAINT_MIN, TRI_YAW_CONSTRAINT_MAX); //REAR
     #endif
     #ifdef QUADP
       motor[0] = PIDMIX( 0,+1,-1); //REAR
@@ -1022,44 +935,12 @@ void mixTable() {
         S_ROLL  = TILT_ROLL_MIDDLE;
       #endif
       if (rcOptions[BOXCAMSTAB]) {
-        S_PITCH += TILT_PITCH_PROP * att.angle[PITCH] /16 ;
-        S_ROLL  += TILT_ROLL_PROP  * att.angle[ROLL]  /16 ;
+        S_PITCH += TILT_PITCH_PROP * angle[PITCH] /16 ;
+        S_ROLL  += TILT_ROLL_PROP  * angle[ROLL]  /16 ;
       }
-      #if defined(SERVO_STRETH)
-        S_PITCH = map(S_PITCH, 1000,2000, TILT_PITCH_MIN,TILT_PITCH_MAX);
-        S_ROLL  = map(S_ROLL,  1000,2000, TILT_ROLL_MIN ,TILT_ROLL_MAX);
-      #endif
       S_PITCH = constrain(S_PITCH, TILT_PITCH_MIN, TILT_PITCH_MAX);
       S_ROLL  = constrain(S_ROLL , TILT_ROLL_MIN, TILT_ROLL_MAX  );
     #endif
-
-      /****************                Cam stabilize Sevos by NHADRIAN            ******************/
-
-      #if defined(SERVO_TILT_NHADRIAN)
-        #if defined(A0_A1_PIN_HEX) && (NUMBER_MOTOR == 6) && defined(PROMINI)
-          #define S_PITCH servo[2]
-          #define S_ROLL  servo[3]
-        #else
-          #define S_PITCH servo[0]
-          #define S_ROLL  servo[1]
-        #endif
-        S_PITCH = TILT_PITCH_MIDDLE - (camstab.dif[PITCH] * TILT_PITCH_I / 10) + (camstab.acc[PITCH] * TILT_PITCH_P / 4);
-        S_ROLL  = TILT_ROLL_MIDDLE + (camstab.dif[ROLL] * TILT_ROLL_I / 10)  + (camstab.acc[ROLL] * TILT_ROLL_P / 4);
-        if (rcOptions[BOXCAMSTAB]) {
-          S_PITCH += TILT_PITCH_PROP * att.angle[PITCH] /16 ;
-          S_ROLL  += TILT_ROLL_PROP  * att.angle[ROLL]  /16 ;
-        }
-        #if defined(PITCH_TO_TILT)
-          S_PITCH -= rcCommand[PITCH] * PITCH_TO_TILT / 10;
-        #endif
-
-        #if defined(ROLL_TO_TILT)
-          S_ROLL -= rcCommand[ROLL] * ROLL_TO_TILT / 10;
-        #endif
-
-        S_PITCH = constrain(S_PITCH, TILT_PITCH_MIN, TILT_PITCH_MAX);
-        S_ROLL  = constrain(S_ROLL , TILT_ROLL_MIN, TILT_ROLL_MAX  );   
-      #endif
 
     //#if defined(MEGA) && defined(MEGA_HW_PWM_SERVOS) && !defined(FIXEDWING) && !defined(HELICOPTER) && (RC_CHANS>8) //<- this part is not clean
     //  servo[3] = rcData[8];
@@ -1086,26 +967,16 @@ void mixTable() {
         angleR  = TILT_ROLL_MIDDLE - 1500;
       #endif
       if (rcOptions[BOXCAMSTAB]) {
-        angleP += TILT_PITCH_PROP * att.angle[PITCH] /16 ;
-        angleR += TILT_ROLL_PROP  * att.angle[ROLL]  /16 ;
+        angleP += TILT_PITCH_PROP * angle[PITCH] /16 ;
+        angleR += TILT_ROLL_PROP  * angle[ROLL]  /16 ;
       }
-      S_PITCH = 1500+angleP-angleR;
-      S_ROLL  = 1500-angleP-angleR;
-      #if defined(SERVO_STRETH)
-        S_PITCH = map(S_PITCH, 1000,2000, TILT_PITCH_MIN,TILT_PITCH_MAX);
-        S_ROLL  = map(S_ROLL,  1000,2000, TILT_ROLL_MIN ,TILT_ROLL_MAX);
-      #endif
-      S_PITCH = constrain(S_PITCH, TILT_PITCH_MIN, TILT_PITCH_MAX);
-      S_ROLL  = constrain(S_ROLL, TILT_ROLL_MIN, TILT_ROLL_MAX);   
+      S_PITCH = constrain(1500+angleP-angleR, TILT_PITCH_MIN, TILT_PITCH_MAX);
+      S_ROLL  = constrain(1500-angleP-angleR, TILT_ROLL_MIN, TILT_ROLL_MAX);   
     #endif 
 
     #ifdef GIMBAL
-      servo[0] = constrain(TILT_PITCH_MIDDLE + TILT_PITCH_PROP * att.angle[PITCH] /16 + rcCommand[PITCH], TILT_PITCH_MIN, TILT_PITCH_MAX);
-      servo[1] = constrain(TILT_ROLL_MIDDLE + TILT_ROLL_PROP   * att.angle[ROLL]  /16 + rcCommand[ROLL], TILT_ROLL_MIN, TILT_ROLL_MAX);
-      #if defined(SERVO_STRETH)
-        servo[0] = map(servo[0], 1000,2000, TILT_PITCH_MIN,TILT_PITCH_MAX);
-        servo[1] = map(servo[1], 1000,2000, TILT_ROLL_MIN ,TILT_ROLL_MAX);
-      #endif
+      servo[0] = constrain(TILT_PITCH_MIDDLE + TILT_PITCH_PROP * angle[PITCH] /16 + rcCommand[PITCH], TILT_PITCH_MIN, TILT_PITCH_MAX);
+      servo[1] = constrain(TILT_ROLL_MIDDLE + TILT_ROLL_PROP   * angle[ROLL]  /16 + rcCommand[ROLL], TILT_ROLL_MIN, TILT_ROLL_MAX);
     #endif
 
     #if defined(FLYING_WING)
@@ -1212,21 +1083,14 @@ void mixTable() {
         // This is a beta requested by  xuant9
         // Assisted modes (gyro only or gyro+acc according to AUX configuration in Gui
         //http://www.kkmulticopter.kr/products_pic/index.html?sn=multicopter_v02_du&name=KKMultiCopter%20Flight%20Controller%20Blackboard%3Cbr%3E
-        servo[4]  = servoMid[4] + (axisPID[PITCH] * dcServo[0]) ;  //  PITCHServo   D11 => Wing2 servo
-        servo[5]  = servoMid[5] + (axisPID[ROLL]  * dcServo[1]) ;  //  ROLLServo    D3  => Rudder servo
+        servo[5]  = servoMid[5] + (axisPID[PITCH] * dcServo[0]) ;  //  PITCHServo 3  D12
+        servo[6]  = servoMid[6] + (axisPID[ROLL]  * dcServo[1]) ;  //  ROLLServo  4  D11
         motor[0] = PIDMIX(0,0,-1);                                 //  Pin D9
         motor[1] = PIDMIX(0,0,+1);                                 //  Pin D10
-          
-        if (!f.ARMED){ // For displaying motors in GUI 
-          servo[6] =  MINCOMMAND; servo[7] =  MINCOMMAND; // Kill throttle when disarmed
-        } else {
-          servo[6] = constrain( motor[1], MINTHROTTLE, MAXTHROTTLE);
-          servo[7] = constrain( motor[0], MINTHROTTLE, MAXTHROTTLE);
-        }
-        #endif
-      
+      #endif
+
       // ServoRates
-      #if !defined(USE_THROTTLESERVO)&& !defined(DUALCOPTER)
+      #if !defined(USE_THROTTLESERVO)
         motor[0]= rcData[THROTTLE];
       #endif
       for(i=3;i<8;i++){
@@ -1369,18 +1233,46 @@ void mixTable() {
     }
     if (rcOptions[BOXCAMTRIG]) camCycle=1;
   #endif
+  /****************     neutralize Servos during calibration of gyro&acc   ******************/
+  #ifdef SERVO
+    if ( (!f.ARMED) && ((calibratingG > 0) || (calibratingA > 0)) ) servos2Neutral();
+  #endif
   /****************                Filter the Motors values                ******************/
   #ifdef GOVERNOR_P
     if (rcOptions[BOXGOV] ) {
       static int8_t g[37] = { 0,3,5,8,11,14,17,19,22,25,28,31,34,38,41,44,47,51,54,58,61,65,68,72,76,79,83,87,91,95,99,104,108,112,117,121,126 };
-      uint8_t v = constrain( VBATNOMINAL - constrain(analog.vbat, conf.vbatlevel_crit, VBATNOMINAL), 0, 36);
+      uint8_t v = constrain( VBATNOMINAL - constrain(vbat, conf.vbatlevel_crit, VBATNOMINAL), 0, 36);
       for (i = 0; i < NUMBER_MOTOR; i++) {
         motor[i] += ( ( (int32_t)(motor[i]-1000) * (int32_t)g[v] ) * (int32_t)conf.governorR )/ 5000;
       }
     }
   #endif
   /****************                normalize the Motors values                ******************/
-
+  #ifdef LEAVE_HEADROOM_FOR_MOTORS
+    // limit this leaving room for corrections to the first #n of all motors
+    maxMotor=motor[0];
+    for(i=1; i < LEAVE_HEADROOM_FOR_MOTORS; i++)
+      if (motor[i]>maxMotor) maxMotor=motor[i];
+    if (maxMotor > MAXTHROTTLE) { // this is a way to still have good gyro corrections if at least one motor reaches its max.
+      for(i=0; i < LEAVE_HEADROOM_FOR_MOTORS; i++)
+        motor[i] -= maxMotor - MAXTHROTTLE;
+    }
+    for (i = 0; i < NUMBER_MOTOR; i++) {
+      motor[i] = constrain(motor[i], conf.minthrottle, MAXTHROTTLE);
+      #if defined(ALTHOLD_FAST_THROTTLE_CHANGE)
+        if (rcData[THROTTLE] < MINCHECK)
+      #else
+        if ((rcData[THROTTLE] < MINCHECK) && !f.BARO_MODE)
+      #endif
+        #ifndef MOTOR_STOP
+          motor[i] = conf.minthrottle;
+        #else
+          motor[i] = MINCOMMAND;
+        #endif
+      if (!f.ARMED)
+        motor[i] = MINCOMMAND;
+    }
+  #else // LEAVE_HEADROOM_FOR_MOTORS
     maxMotor=motor[0];
     for(i=1; i< NUMBER_MOTOR; i++)
       if (motor[i]>maxMotor) maxMotor=motor[i];
@@ -1401,13 +1293,10 @@ void mixTable() {
       if (!f.ARMED)
         motor[i] = MINCOMMAND;
     }
-
+  #endif // LEAVE_HEADROOM_FOR_MOTORS
   /****************                      Powermeter Log                    ******************/
   #if (LOG_VALUES >= 3) || defined(POWERMETER_SOFT)
-  {
-    static uint32_t lastRead = currentTime;
-    uint16_t amp;
-    uint32_t ampsum, ampus; // pseudo ampere * microseconds
+    uint16_t amp, ampsum;
     /* true cubic function;
      * when divided by vbat_max=126 (12.6V) for 3 cell battery this gives maximum value of ~ 500
      * when divided by no_vbat=60 (6V) for 3 cell battery this gives maximum value of ~ 1000
@@ -1422,23 +1311,20 @@ void mixTable() {
                                      28274,30041,31879,33792,35779,37843,39984,42205,
                                      44507,46890,49358,51910,54549,57276,60093,63000};
   
-    if (analog.vbat > NO_VBAT) { // by all means - must avoid division by zero
+    if (vbat > conf.no_vbat) { // by all means - must avoid division by zero
       ampsum = 0;
       for (i =0;i<NUMBER_MOTOR;i++) {
-        amp = amperes[ ((motor[i] - 1000)>>4) ] / analog.vbat; // range mapped from [1000:2000] => [0:1000]; then break that up into 64 ranges; lookup amp
-        ampus = ( (currentTime-lastRead) * (uint32_t)amp * (uint32_t)conf.pint2ma ) / PLEVELDIVSOFT;
-        #if (LOG_VALUES >= 3)
-          pMeter[i]+= ampus; // sum up over time the mapped ESC input
+        amp = amperes[ ((motor[i] - 1000)>>4) ] / vbat; // range mapped from [1000:2000] => [0:1000]; then break that up into 64 ranges; lookup amp
+           #if (LOG_VALUES >= 3)
+           pMeter[i]+= amp; // sum up over time the mapped ESC input 
         #endif
         #if defined(POWERMETER_SOFT)
-          ampsum += ampus; // total sum over all motors
+           ampsum += amp; // total sum over all motors
         #endif
       }
       #if defined(POWERMETER_SOFT)
-        pMeter[PMOTOR_SUM]+= ampsum / NUMBER_MOTOR; // total sum over all motors
+        pMeter[PMOTOR_SUM]+= ampsum; // total sum over all motors
       #endif
     }
-    lastRead = currentTime;
-  }
   #endif
 }

@@ -52,11 +52,11 @@ void alarmHandler(){
   #endif  
      
   #if defined(FAILSAFE)
-    if ( failsafe.active && f.ARMED) {
+    if ( failsafeCnt > (5*FAILSAFE_DELAY) && f.ARMED) {
       alarmArray[1] = 1;                                                                   //set failsafe warning level to 1 while landing
       if (failsafeCnt > 5*(FAILSAFE_DELAY+FAILSAFE_OFF_DELAY)) alarmArray[1] = 2;          //start "find me" signal after landing   
     }
-    if ( failsafe.active && !f.ARMED) alarmArray[1] = 2;                  // tx turned off while motors are off: start "find me" signal
+    if ( failsafeCnt > (5*FAILSAFE_DELAY) && !f.ARMED) alarmArray[1] = 2;                  // tx turned off while motors are off: start "find me" signal
     if ( failsafeCnt == 0) alarmArray[1] = 0;                                              // turn off alarm if TX is okay
   #endif
   
@@ -83,10 +83,9 @@ void alarmHandler(){
   
   #if defined(VBAT)
     if (vbatMin < conf.vbatlevel_crit) alarmArray[6] = 4;
-    else if ( (analog.vbat > conf.vbatlevel_warn1)  || (NO_VBAT > analog.vbat)) alarmArray[6] = 0;
-    else if (analog.vbat > conf.vbatlevel_warn2) alarmArray[6] = 1;
-    else if (analog.vbat > conf.vbatlevel_crit) alarmArray[6] = 2;
-    //else alarmArray[6] = 4;
+    else if ( (vbat>conf.vbatlevel_warn1)  || (conf.no_vbat > vbat)) alarmArray[6] = 0;
+    else if (vbat > conf.vbatlevel_warn2) alarmArray[6] = 2;
+    else alarmArray[6] = 4;
   #endif
   
   if (i2c_errors_count > i2c_errors_count_old+100 || i2c_errors_count < -1) alarmArray[9] = 1;
@@ -422,7 +421,7 @@ void blinkLED(uint8_t num, uint8_t ontime,uint8_t repeat) {
   #else
       b[4]=0;
   #endif
-      b[5]=(180-att.heading)/2; // 1 unit = 2 degrees;
+      b[5]=(180-heading)/2; // 1 unit = 2 degrees;
       b[6]=GPS_numSat;                                      
       i2c_rep_start(LED_RING_ADDRESS);
       for(uint8_t i=0;i<7;i++){
@@ -431,7 +430,7 @@ void blinkLED(uint8_t num, uint8_t ontime,uint8_t repeat) {
       i2c_stop();
     }
   #if defined (VBAT)
-    if (analog.vbat < conf.vbatlevel_warn1){ // Uh oh - battery low
+    if (vbat < conf.vbatlevel_warn1){ // Uh oh - battery low
       i2c_rep_start(LED_RING_ADDRESS);
       i2c_write('r');
       i2c_stop();   
@@ -506,27 +505,6 @@ void blinkLED(uint8_t num, uint8_t ontime,uint8_t repeat) {
    */
   void led_flasher_autoselect_sequence() {
     if (led_flasher_control != LED_FLASHER_AUTO) return;
-
-    #if defined(LED_FLASHER_SEQUENCE_FAILSAFE) && defined(FAILSAFE)//NHADRIAN - failsafe LED sequence
-      if (failsafe.active) {
-        led_flasher_set_sequence(LED_FLASHER_SEQUENCE_FAILSAFE);
-        return;
-      }
-    #endif
-
-    #if defined(LED_FLASHER_SEQUENCE_VBAT_WARN2) && defined(VBATLEVEL_WARN2) && defined(VBAT) //NHADRIAN - VBAT2 alarm LED sequence
-      if (analog.vbat < conf.vbatlevel_warn2) {
-        led_flasher_set_sequence(LED_FLASHER_SEQUENCE_VBAT_WARN2);
-        return;
-      }
-    #endif
-
-    #if defined(LED_FLASHER_SEQUENCE_VBAT_WARN1) && defined(VBATLEVEL_WARN1) && defined(VBAT) //NHADRIAN - VBAT1 alarm LED sequence
-      if (analog.vbat < conf.vbatlevel_warn1) {
-        led_flasher_set_sequence(LED_FLASHER_SEQUENCE_VBAT_WARN1);
-        return;
-      }
-    #endif
 
     #if defined(LED_FLASHER_SEQUENCE_MAX)
     /* do we want the complete illumination no questions asked? */
@@ -625,9 +603,9 @@ void vario_signaling() {
   /* method 1: use vario to follow short term up/down movement : */
   #if (VARIOMETER == 1) || (VARIOMETER == 12)
   {
-    uint8_t up = (alt.vario > 0 ? 1 : 0 ); //, down = (vario < 0 ? 1 : 0 );
+    uint8_t up = (vario > 0 ? 1 : 0 ); //, down = (vario < 0 ? 1 : 0 );
     //int16_t v = abs(vario) - up * TRESHOLD_UP - down * TRESHOLD_DOWN;
-    v = abs(alt.vario) - up * (TRESHOLD_UP_MINUS_DOWN) - TRESHOLD_DOWN;
+    v = abs(vario) - up * (TRESHOLD_UP_MINUS_DOWN) - TRESHOLD_DOWN;
     if (silence>0) silence--; else silence = 0;
     if (v > 0) {
       // going up or down

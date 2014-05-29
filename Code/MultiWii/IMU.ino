@@ -23,8 +23,8 @@ void computeIMU () {
     for (axis = 0; axis < 3; axis++) {
       // empirical, we take a weighted value of the current and the previous values
       // /4 is to average 4 values, note: overflow is not possible for WMP gyro here
-      imu.gyroData[axis] = (imu.gyroADC[axis]*3+gyroADCprevious[axis])>>2;
-      gyroADCprevious[axis] = imu.gyroADC[axis];
+      gyroData[axis] = (gyroADC[axis]*3+gyroADCprevious[axis])>>2;
+      gyroADCprevious[axis] = gyroADC[axis];
     }
   #else
     #if ACC
@@ -35,7 +35,7 @@ void computeIMU () {
       Gyro_getADC();
     #endif
     for (axis = 0; axis < 3; axis++)
-      gyroADCp[axis] =  imu.gyroADC[axis];
+      gyroADCp[axis] =  gyroADC[axis];
     timeInterleave=micros();
     annexCode();
     if ((micros()-timeInterleave)>650) {
@@ -47,23 +47,23 @@ void computeIMU () {
       Gyro_getADC();
     #endif
     for (axis = 0; axis < 3; axis++) {
-      gyroADCinter[axis] =  imu.gyroADC[axis]+gyroADCp[axis];
+      gyroADCinter[axis] =  gyroADC[axis]+gyroADCp[axis];
       // empirical, we take a weighted value of the current and the previous values
-      imu.gyroData[axis] = (gyroADCinter[axis]+gyroADCprevious[axis])/3;
+      gyroData[axis] = (gyroADCinter[axis]+gyroADCprevious[axis])/3;
       gyroADCprevious[axis] = gyroADCinter[axis]>>1;
-      if (!ACC) imu.accADC[axis]=0;
+      if (!ACC) accADC[axis]=0;
     }
   #endif
   #if defined(GYRO_SMOOTHING)
     static int16_t gyroSmooth[3] = {0,0,0};
     for (axis = 0; axis < 3; axis++) {
-      imu.gyroData[axis] = (int16_t) ( ( (int32_t)((int32_t)gyroSmooth[axis] * (conf.Smoothing[axis]-1) )+imu.gyroData[axis]+1 ) / conf.Smoothing[axis]);
-      gyroSmooth[axis] = imu.gyroData[axis];
+      gyroData[axis] = (int16_t) ( ( (int32_t)((int32_t)gyroSmooth[axis] * (conf.Smoothing[axis]-1) )+gyroData[axis]+1 ) / conf.Smoothing[axis]);
+      gyroSmooth[axis] = gyroData[axis];
     }
   #elif defined(TRI)
     static int16_t gyroYawSmooth = 0;
-    imu.gyroData[YAW] = (gyroYawSmooth*2+imu.gyroData[YAW])/3;
-    gyroYawSmooth = imu.gyroData[YAW];
+    gyroData[YAW] = (gyroYawSmooth*2+gyroData[YAW])/3;
+    gyroYawSmooth = gyroData[YAW];
   #endif
 }
 
@@ -108,7 +108,7 @@ void computeIMU () {
 #define INV_GYR_CMPF_FACTOR   (1.0f / (GYR_CMPF_FACTOR  + 1.0f))
 #define INV_GYR_CMPFM_FACTOR  (1.0f / (GYR_CMPFM_FACTOR + 1.0f))
 
-#define GYRO_SCALE ((2279 * PI)/((32767.0f / 4.0f ) * 180.0f * 1000000.0f)) //(ITG3200 and MPU6050)
+#define GYRO_SCALE ((2380 * PI)/((32767.0f / 4.0f ) * 180.0f * 1000000.0f)) //(ITG3200 and MPU6050) //should be 2279.44 but 2380 gives better result
 // +-2000/sec deg scale
 // for WMP, empirical value should be #define GYRO_SCALE (1.0f/200e6f)
 // !!!!should be adjusted to the rad/sec and be part defined in each gyro sensor
@@ -180,7 +180,6 @@ void getEstimatedAttitude(){
   uint8_t axis;
   int32_t accMag = 0;
   float scale, deltaGyroAngle[3];
-  uint8_t validAcc;
   static uint16_t previousT;
   uint16_t currentT = micros();
 
@@ -189,66 +188,69 @@ void getEstimatedAttitude(){
 
   // Initialization
   for (axis = 0; axis < 3; axis++) {
-    deltaGyroAngle[axis] = imu.gyroADC[axis]  * scale;
+    deltaGyroAngle[axis] = gyroADC[axis]  * scale;
 
     accLPF32[axis]    -= accLPF32[axis]>>ACC_LPF_FACTOR;
-    accLPF32[axis]    += imu.accADC[axis];
-    imu.accSmooth[axis]    = accLPF32[axis]>>ACC_LPF_FACTOR;
+    accLPF32[axis]    += accADC[axis];
+    accSmooth[axis]    = accLPF32[axis]>>ACC_LPF_FACTOR;
 
-    accMag += (int32_t)imu.accSmooth[axis]*imu.accSmooth[axis] ;
+    accMag += (int32_t)accSmooth[axis]*accSmooth[axis] ;
   }
+  accMag = accMag*100/((int32_t)acc_1G*acc_1G);
 
   rotateV(&EstG.V,deltaGyroAngle);
   #if MAG
     rotateV(&EstM.V,deltaGyroAngle);
   #endif
 
-  if ( abs(imu.accSmooth[ROLL])<ACC_25deg && abs(imu.accSmooth[PITCH])<ACC_25deg && imu.accSmooth[YAW]>0) {
+  if ( abs(accSmooth[ROLL])<acc_25deg && abs(accSmooth[PITCH])<acc_25deg && accSmooth[YAW]>0) {
     f.SMALL_ANGLES_25 = 1;
   } else {
     f.SMALL_ANGLES_25 = 0;
   }
 
-  accMag = accMag*100/((int32_t)ACC_1G*ACC_1G);
-  validAcc = 72 < accMag && accMag < 133;
   // Apply complimentary filter (Gyro drift correction)
   // If accel magnitude >1.15G or <0.85G and ACC vector outside of the limit range => we neutralize the effect of accelerometers in the angle estimation.
+  // If accel magnitude >1.4G or <0.6G and ACC vector outside of the limit range => we neutralize the effect of accelerometers in the angle estimation.
   // To do that, we just skip filter, as EstV already rotated by Gyro
-  for (axis = 0; axis < 3; axis++) {
-    if ( validAcc )
-      EstG.A[axis] = (EstG.A[axis] * GYR_CMPF_FACTOR + imu.accSmooth[axis]) * INV_GYR_CMPF_FACTOR;
-    EstG32.A[axis] = EstG.A[axis]; //int32_t cross calculation is a little bit faster than float	
-    #if MAG
-      EstM.A[axis] = (EstM.A[axis] * GYR_CMPFM_FACTOR  + imu.magADC[axis]) * INV_GYR_CMPFM_FACTOR;
-      EstM32.A[axis] = EstM.A[axis];
-    #endif
-  }
-
-  // Attitude of the estimated vector
-  int32_t sqGX_sqGZ = sq(EstG32.V.X) + sq(EstG32.V.Z);
-  invG = InvSqrt(sqGX_sqGZ + sq(EstG32.V.Y));
-  att.angle[ROLL]  = _atan2(EstG32.V.X , EstG32.V.Z);
-  att.angle[PITCH] = _atan2(EstG32.V.Y , InvSqrt(sqGX_sqGZ)*sqGX_sqGZ);
-
+  //if (  72 < accMag && accMag < 133 )
+  if ( ( 36 < accMag && accMag < 196 ) || f.SMALL_ANGLES_25 )
+    for (axis = 0; axis < 3; axis++) {
+      EstG.A[axis] = (EstG.A[axis] * GYR_CMPF_FACTOR + accSmooth[axis]) * INV_GYR_CMPF_FACTOR;
+    }
   #if MAG
-    att.heading = _atan2(
-      EstM32.V.Z * EstG32.V.X - EstM32.V.X * EstG32.V.Z,
-      EstM32.V.Y * invG * sqGX_sqGZ  - (EstM32.V.X * EstG32.V.X + EstM32.V.Z * EstG32.V.Z) * invG * EstG32.V.Y ); 
-    //att.heading += MAG_DECLINIATION * 10; //add declination
-    att.heading += conf.mag_decliniation; // Set from GUI
-    att.heading /= 10;
+    for (axis = 0; axis < 3; axis++) {
+      EstM.A[axis] = (EstM.A[axis] * GYR_CMPFM_FACTOR  + magADC[axis]) * INV_GYR_CMPFM_FACTOR;
+      EstM32.A[axis] = EstM.A[axis];
+    }
   #endif
 
-  #if defined(THROTTLE_ANGLE_CORRECTION)
-    cosZ = EstG.V.Z / ACC_1G * 100.0f;                                                        // cos(angleZ) * 100 
-    throttleAngleCorrection = THROTTLE_ANGLE_CORRECTION * constrain(100 - cosZ, 0, 100) >>3;  // 16 bit ok: 200*150 = 30000  
+  for (axis = 0; axis < 3; axis++)
+    EstG32.A[axis] = EstG.A[axis]; //int32_t cross calculation is a little bit faster than float	
+
+  // Attitude of the estimated vector
+  int32_t sqGZ = sq(EstG32.V.Z);
+  int32_t sqGX = sq(EstG32.V.X);
+  int32_t sqGY = sq(EstG32.V.Y);
+  int32_t sqGX_sqGZ = sqGX + sqGZ;
+  float invmagXZ  = InvSqrt(sqGX_sqGZ);
+  invG = InvSqrt(sqGX_sqGZ + sqGY);
+  angle[ROLL]  = _atan2(EstG32.V.X , EstG32.V.Z);
+  angle[PITCH] = _atan2(EstG32.V.Y , invmagXZ*sqGX_sqGZ);
+
+  #if MAG
+    heading = _atan2(
+      EstM32.V.Z * EstG32.V.X - EstM32.V.X * EstG32.V.Z,
+      EstM32.V.Y * invG * sqGX_sqGZ  - (EstM32.V.X * EstG32.V.X + EstM32.V.Z * EstG32.V.Z) * invG * EstG32.V.Y ); 
+    heading += MAG_DECLINIATION * 10; //add declination
+    heading = heading /10;
   #endif
 }
 
 #define UPDATE_INTERVAL 25000    // 40hz update rate (20hz LPF on acc)
 #define BARO_TAB_SIZE   21
 
-#define ACC_Z_DEADBAND (ACC_1G>>5) // was 40 instead of 32 now
+#define ACC_Z_DEADBAND (acc_1G>>5) // was 40 instead of 32 now
 
 
 #define applyDeadband(value, deadband)  \
@@ -273,33 +275,41 @@ uint8_t getEstimatedAltitude(){
   previousT = currentT;
 
   if(calibratingB > 0) {
-    baroGroundPressure = baroPressureSum/(BARO_TAB_SIZE - 1);
+    baroGroundPressure = baroPressureSum/(float)(BARO_TAB_SIZE - 1) + 0.5f;
     calibratingB--;
   }
 
   // pressure relative to ground pressure with temperature compensation (fast!)
   // baroGroundPressure is not supposed to be 0 here
   // see: https://code.google.com/p/ardupilot-mega/source/browse/libraries/AP_Baro/AP_Baro.cpp
-  BaroAlt = log( baroGroundPressure * (BARO_TAB_SIZE - 1)/ (float)baroPressureSum ) * (baroTemperature+27315) * 29.271267f; // in cemtimeter 
-
-  alt.EstAlt = (alt.EstAlt * 6 + BaroAlt * 2) >> 3; // additional LPF to reduce baro noise (faster by 30 µs)
+  // log(0) is bad!
+  if(baroGroundPressure != 0) {
+    // pressure relative to ground pressure with temperature compensation (fast!)
+    // see: https://code.google.com/p/ardupilot-mega/source/browse/libraries/AP_Baro/AP_Baro.cpp
+    //BaroAlt = log( baroGroundPressure / (baroPressureSum/(float)(BARO_TAB_SIZE - 1)) ) * (baroTemperature+27315) * 29.271267f; // in cemtimeter 
+    BaroAlt = log( baroGroundPressure * (BARO_TAB_SIZE - 1)/ (float)baroPressureSum ) * (baroTemperature+27315) * 29.271267f; // in cemtimeter 	
+  } else {
+    BaroAlt = 0;
+  }
+  
+  EstAlt = (EstAlt * 6 + BaroAlt * 2) >> 3; // additional LPF to reduce baro noise (faster by 30 µs)
 
   #if (defined(VARIOMETER) && (VARIOMETER != 2)) || !defined(SUPPRESS_BARO_ALTHOLD)
     //P
-    int16_t error16 = constrain(AltHold/10 - alt.EstAlt, -400, 400);
+    int16_t error16 = constrain(AltHold - EstAlt, -300, 300);
     applyDeadband(error16, 10); //remove small P parametr to reduce noise near zero position
-    BaroPID = constrain((conf.pid[PIDALT].P8 * error16 >>7), -200, +200);
+    BaroPID = constrain((conf.P8[PIDALT] * error16 >>7), -150, +150);
 
     //I
-    errorAltitudeI += conf.pid[PIDALT].I8 * error16 >>6;
+    errorAltitudeI += conf.I8[PIDALT] * error16 >>6;
     errorAltitudeI = constrain(errorAltitudeI,-30000,30000);
     BaroPID += errorAltitudeI>>9; //I in range +/-60
  
     // projection of ACC vector to global Z, with 1G subtructed
     // Math: accZ = A * G / |G| - 1G
-    int16_t accZ = (imu.accSmooth[ROLL] * EstG32.V.X + imu.accSmooth[PITCH] * EstG32.V.Y + imu.accSmooth[YAW] * EstG32.V.Z) * invG;
+    int16_t accZ = (accSmooth[ROLL] * EstG32.V.X + accSmooth[PITCH] * EstG32.V.Y + accSmooth[YAW] * EstG32.V.Z) * invG;
 
-    static int16_t accZoffset = 0;
+    static int16_t accZoffset = 0; // = acc_1G*6; //58 bytes saved and convergence is fast enough to omit init
     if (!f.ARMED) {
       accZoffset -= accZoffset>>3;
       accZoffset += accZ;
@@ -308,13 +318,14 @@ uint8_t getEstimatedAltitude(){
     applyDeadband(accZ, ACC_Z_DEADBAND);
 
     static float vel = 0.0f;
+    static float accVelScale = 9.80665f / 10000.0f / acc_1G ;
 
     // Integrator - velocity, cm/sec
-    vel += accZ * ACC_VelScale * dTime;
+    vel += accZ * accVelScale * dTime;
 
     static int32_t lastBaroAlt;
-    int16_t baroVel = (alt.EstAlt - lastBaroAlt) * 1000000.0f / dTime;
-    lastBaroAlt = alt.EstAlt;
+    int16_t baroVel = (EstAlt - lastBaroAlt) * 1000000.0f / dTime;
+    lastBaroAlt = EstAlt;
 
     baroVel = constrain(baroVel, -300, 300); // constrain baro velocity +/- 300cm/s
     applyDeadband(baroVel, 10); // to reduce noise near zero
@@ -326,13 +337,8 @@ uint8_t getEstimatedAltitude(){
     //D
     int16_t vel_tmp = vel;
     applyDeadband(vel_tmp, 5);
-    alt.vario = vel_tmp;
-    
-    #if defined(VARIO_ALT_MODE) || defined(RTH_ALT_MODE) || defined(FAILSAFE_RTH_MODE) || defined(WP_ALT_MODE)
-       vel_tmp -= targetVario;
-    #endif
-
-    BaroPID -= constrain(conf.pid[PIDALT].D8 * vel_tmp >>4, -150, 150);
+    vario = vel_tmp;
+    BaroPID -= constrain(conf.D8[PIDALT] * vel_tmp >>4, -150, 150);
   #endif
   return 1;
 }
