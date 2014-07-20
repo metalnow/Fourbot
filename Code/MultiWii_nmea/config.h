@@ -484,7 +484,7 @@
     /* This is the speed of the serial interfaces */
     #define SERIAL0_COM_SPEED 115200
     #define SERIAL1_COM_SPEED 38400     // for bluetooth
-    #define SERIAL2_COM_SPEED 57600    // for gps
+    #define SERIAL2_COM_SPEED 115200    // for gps
     #define SERIAL3_COM_SPEED 115200    
 
     /* interleaving delay in micro seconds between 2 readings WMP/NK in a WMP+NK config
@@ -644,7 +644,7 @@
        in NMEA mode the GPS must be configured to output GGA and RMC NMEA sentences (which is generally the default conf for most GPS devices)
        at least 5Hz update rate. uncomment the first line to select the GPS serial port of the arduino */
     #define GPS_SERIAL 2 // should be 2 for flyduino v2. It's the serial port number on arduino MEGA
-    #define GPS_BAUD   57600
+    #define GPS_BAUD   115200
 
 
    /* GPS protocol 
@@ -654,8 +654,8 @@
        With UBLOX and MTK_BINARY you don't have to use GPS_FILTERING in multiwii code !!! */
 
     
-    //#define NMEA
-    #define UBLOX
+    #define NMEA
+    //#define UBLOX
     //#define MTK_BINARY16
     //#define MTK_BINARY19
     //#define INIT_MTK_GPS        // initialize MTK GPS for using selected speed, 5Hz update rate and GGA & RMC sentence or binary settings

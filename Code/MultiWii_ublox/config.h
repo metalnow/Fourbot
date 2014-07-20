@@ -483,7 +483,7 @@
   /******                Serial com speed    *********************************/
     /* This is the speed of the serial interfaces */
     #define SERIAL0_COM_SPEED 115200
-    #define SERIAL1_COM_SPEED 9600     // for bluetooth
+    #define SERIAL1_COM_SPEED 38400     // for bluetooth
     #define SERIAL2_COM_SPEED 57600    // for gps
     #define SERIAL3_COM_SPEED 115200    // for 
 
